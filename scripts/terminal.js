@@ -15,6 +15,14 @@ export class Terminal {
     this.currentPath = '/';
     this.previousPath = null;
     
+    // Tab completion state
+    this.tabState = {
+      active: false,
+      matches: [],
+      index: 0,
+      originalInput: ''
+    };
+    
     this.setupEventListeners();
   }
 
@@ -26,6 +34,7 @@ export class Terminal {
       if (e.key === 'Enter') {
         const cmdLine = this.input.value;
         this.input.value = '';
+        this.resetTabState();
         
         if (cmdLine.trim()) {
           this.commandHistory.push(cmdLine);
@@ -34,12 +43,14 @@ export class Terminal {
         }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
+        this.resetTabState();
         if (this.historyIndex > 0) {
           this.historyIndex--;
           this.input.value = this.commandHistory[this.historyIndex];
         }
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
+        this.resetTabState();
         if (this.historyIndex < this.commandHistory.length - 1) {
           this.historyIndex++;
           this.input.value = this.commandHistory[this.historyIndex];
@@ -51,6 +62,11 @@ export class Terminal {
         e.preventDefault();
         await this.onTabComplete(this.input.value);
       }
+    });
+
+    // Reset tab state on input change (typing)
+    this.input.addEventListener('input', () => {
+      this.resetTabState();
     });
 
     // Focus input on click
@@ -65,6 +81,32 @@ export class Terminal {
   onTabComplete = async (input) => {
     // Override this in app.js
     console.log('Tab complete:', input);
+  }
+
+  /**
+   * Reset tab completion state
+   */
+  resetTabState() {
+    this.tabState = {
+      active: false,
+      matches: [],
+      index: 0,
+      originalInput: ''
+    };
+  }
+
+  /**
+   * Get tab state
+   */
+  getTabState() {
+    return this.tabState;
+  }
+
+  /**
+   * Set tab state
+   */
+  setTabState(state) {
+    this.tabState = { ...this.tabState, ...state };
   }
 
   /**

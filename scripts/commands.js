@@ -75,8 +75,15 @@ export async function getCompletions(githubUser, currentPath, partial) {
   const parts = partial.split(' ');
   const lastPart = parts[parts.length - 1];
   
-  if (parts.length < 2) return null; // Need at least command + partial path
+  // If no space yet, we're completing a command
+  if (parts.length === 1) {
+    const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download'];
+    const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
+    return { matches, isCommand: true };
+  }
   
+  // Completing a path
   const partialPath = lastPart;
   const dirPath = partialPath.includes('/') 
     ? partialPath.substring(0, partialPath.lastIndexOf('/'))
@@ -107,17 +114,16 @@ export async function getCompletions(githubUser, currentPath, partial) {
       item.toLowerCase().startsWith(prefix.toLowerCase())
     );
     
-    if (matches.length === 1) {
-      const baseCmd = parts.slice(0, -1).join(' ');
-      const completion = dirPath ? `${dirPath}/${matches[0]}` : matches[0];
-      return baseCmd ? `${baseCmd} ${completion}` : completion;
-    } else if (matches.length > 1) {
-      return { matches, prefix: partial };
-    }
-    
-    return null;
+    // Return matches with context for cycling
+    return { 
+      matches, 
+      isCommand: false,
+      baseCmd: parts.slice(0, -1).join(' '),
+      dirPath,
+      prefix
+    };
   } catch {
-    return null;
+    return { matches: [], isCommand: false };
   }
 }
 

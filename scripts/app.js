@@ -81,20 +81,61 @@ Type <span class="info">'help'</span> for available commands.
   }
 
   /**
-   * Handle tab completion
+   * Handle tab completion with cycling
    */
   async handleTabComplete(input) {
-    const completion = await getCompletions(this.githubUser, this.terminal.getPath(), input);
+    const tabState = this.terminal.getTabState();
     
-    if (typeof completion === 'string') {
-      // Single match - complete it
-      this.terminal.setInput(completion + ' ');
-    } else if (completion && completion.matches) {
-      // Multiple matches - show them
-      this.terminal.print(`<span class="prompt">${this.terminal.promptEl.textContent}</span> <span class="command">${input}</span>`);
-      const matchStr = completion.matches.join('  ');
-      this.terminal.print(matchStr);
+    // If tab state is active and input matches, cycle through matches
+    if (tabState.active && tabState.originalInput === input && tabState.matches.length > 1) {
+      tabState.index = (tabState.index + 1) % tabState.matches.length;
+      this.terminal.setTabState(tabState);
+      
+      const match = tabState.matches[tabState.index];
+      const completed = this.buildCompletion(tabState, match);
+      this.terminal.setInput(completed);
+      return;
     }
+    
+    // New tab completion - get matches
+    const result = await getCompletions(this.githubUser, this.terminal.getPath(), input);
+    
+    if (!result || result.matches.length === 0) {
+      return; // No matches
+    }
+    
+    if (result.matches.length === 1) {
+      // Single match - complete it
+      const completed = this.buildCompletion(result, result.matches[0]);
+      this.terminal.setInput(completed);
+      return;
+    }
+    
+    // Multiple matches - start cycling
+    const firstMatch = result.matches[0];
+    const completed = this.buildCompletion(result, firstMatch);
+    
+    this.terminal.setTabState({
+      active: true,
+      matches: result.matches,
+      index: 0,
+      originalInput: input,
+      context: result
+    });
+    
+    this.terminal.setInput(completed);
+  }
+  
+  /**
+   * Build completion string from match
+   */
+  buildCompletion(result, match) {
+    if (result.isCommand) {
+      return match + ' ';
+    }
+    
+    const fullMatch = result.dirPath ? `${result.dirPath}/${match}` : match;
+    return result.baseCmd ? `${result.baseCmd} ${fullMatch}` : fullMatch;
   }
 
   /**
