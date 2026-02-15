@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml } from './utils.js';
 import { LANGUAGE_MAP } from './config.js';
 
@@ -23,7 +23,9 @@ export const commands = {
   readme: cmdReadme,
   head: cmdHead,
   tail: cmdTail,
-  download: cmdDownload
+  download: cmdDownload,
+  // Phase 3 commands
+  grep: cmdGrep
 };
 
 /**
@@ -152,6 +154,7 @@ function cmdHelp(terminal) {
   <span class="info">head</span> &lt;file&gt; [n]   Display first n lines (default: 10)
   <span class="info">tail</span> &lt;file&gt; [n]   Display last n lines (default: 10)
   <span class="info">readme</span>            Display README.md in current directory
+  <span class="info">grep</span> &lt;pattern&gt; [file]   Search for pattern (file or repo-wide)
   <span class="info">download</span> &lt;file&gt;  Download file to your computer
 
  <span class="info">Repository</span>
@@ -168,6 +171,7 @@ function cmdHelp(terminal) {
 <span class="info">Tips:</span>
   - Press <span class="success">Tab</span> to auto-complete paths
   - Press <span class="success">↑/↓</span> to navigate command history
+  - Use <span class="success">grep -i</span> for case-insensitive search
 `;
   terminal.print(help);
 }
@@ -535,4 +539,105 @@ function cmdClear(terminal) {
 
 function cmdExit(terminal) {
   terminal.print(`<span class="info">Goodbye!</span>`);
+}
+
+async function cmdGrep(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: grep &lt;pattern&gt; [file]</span>`);
+    terminal.print(`<span class="info">Examples:</span>`);
+    terminal.print(`  grep "export" app.js      Search in app.js`);
+    terminal.print(`  grep "function"           Search entire repo (GitHub API)`);
+    return;
+  }
+
+  const pattern = args[0];
+  const caseInsensitive = args.includes('-i');
+  const filePath = args.find(a => !a.startsWith('-') && a !== pattern);
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  try {
+    if (filePath) {
+      // Single file grep
+      const targetPath = resolvePath(currentPath, filePath);
+      const fileParsed = parsePath(githubUser, targetPath);
+
+      if (!fileParsed.path) {
+        terminal.print(`<span class="error">Please specify a file, not a directory.</span>`);
+        return;
+      }
+
+      const { content, name } = await fetchFileContent(fileParsed.owner, fileParsed.repo, fileParsed.path);
+      const lines = content.split('\n');
+      
+      const regex = new RegExp(pattern, caseInsensitive ? 'gi' : 'g');
+      const matches = [];
+      
+      lines.forEach((line, index) => {
+        if (regex.test(line)) {
+          matches.push({
+            line: index + 1,
+            content: line.trim()
+          });
+        }
+        // Reset regex lastIndex for global flag
+        regex.lastIndex = 0;
+      });
+
+      if (matches.length === 0) {
+        terminal.print(`<span class="info">No matches found.</span>`);
+        return;
+      }
+
+      terminal.print(`<span class="success">${name}</span>`);
+      matches.forEach(m => {
+        const highlighted = m.content.replace(
+          new RegExp(`(${escapeRegex(pattern)})`, caseInsensitive ? 'gi' : 'g'),
+          '<span class="error">$1</span>'
+        );
+        terminal.print(`<span class="info">${m.line}:</span> ${highlighted}`);
+      });
+      terminal.print(`<span class="info">${matches.length} match(es)</span>`);
+
+    } else {
+      // Repo-wide search using GitHub API
+      terminal.print(`<span class="info">Searching repository for "${pattern}"...</span>`);
+      
+      const searchPath = parsed.path || undefined;
+      const results = await searchCode(parsed.owner, parsed.repo, pattern, searchPath);
+
+      if (results.length === 0) {
+        terminal.print(`<span class="info">No matches found.</span>`);
+        return;
+      }
+
+      terminal.print(`<span class="success">Found ${results.length} file(s):</span>\n`);
+      results.forEach(item => {
+        terminal.print(`  <span class="file">${item.path}</span>`);
+      });
+      terminal.print(`\n<span class="info">Tip: Use 'grep "${pattern}" &lt;file&gt;' to see line matches.</span>`);
+    }
+  } catch (error) {
+    if (error.message === 'REQUIRE_AUTH') {
+      // GitHub code search requires authentication
+      const searchUrl = `https://github.com/${parsed.owner}/${parsed.repo}/search?q=${encodeURIComponent(pattern)}`;
+      terminal.print(`<span class="error">Repo-wide search requires GitHub authentication.</span>`);
+      terminal.print(`<span class="info">Try single-file search: grep "${pattern}" &lt;file&gt;</span>`);
+      terminal.print(`<span class="info">Or search on GitHub:</span>`);
+      terminal.print(`  <a href="${searchUrl}" target="_blank" class="directory">${searchUrl}</a>`);
+    } else {
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  }
+}
+
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

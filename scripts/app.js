@@ -37,7 +37,7 @@ class GitHubOS {
    */
   printWelcome() {
     const welcomeText = `
-<span class="welcome">Welcome to GitHub OS v1.1.0</span>
+<span class="welcome">Welcome to GitHub OS v1.2.0</span>
 Connecting to GitHub user: <span class="success">${this.githubUser}</span>
 
 Type <span class="info">'help'</span> for available commands.

@@ -165,13 +165,52 @@ export async function getRepoInfo(owner, repo) {
       created_at: data.created_at,
       updated_at: data.updated_at,
       homepage: data.homepage,
-      html_url: data.html_url
+      html_url: data.html_url,
+      default_branch: data.default_branch || 'main'
     };
     
     cache.set(cacheKey, info);
     return info;
   } catch (error) {
     throw new Error(`Failed to fetch repo info: ${error.message}`);
+  }
+}
+
+/**
+ * Search code within a repository using GitHub API
+ * Note: GitHub code search API requires authentication
+ */
+export async function searchCode(owner, repo, query, path = '') {
+  try {
+    // Build search query: term repo:owner/repo [path:folder]
+    let searchQuery = `${query} repo:${owner}/${repo}`;
+    if (path) {
+      searchQuery += ` path:${path}`;
+    }
+    
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/search/code?q=${encodeURIComponent(searchQuery)}&per_page=30`
+    );
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('API rate limit exceeded. Try again later.');
+      }
+      if (response.status === 401 || response.status === 422) {
+        throw new Error('REQUIRE_AUTH');
+      }
+      throw new Error('Search failed');
+    }
+    
+    const data = await response.json();
+    
+    return data.items.map(item => ({
+      name: item.name,
+      path: item.path,
+      html_url: item.html_url
+    }));
+  } catch (error) {
+    throw error;
   }
 }
 
