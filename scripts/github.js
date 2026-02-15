@@ -224,3 +224,39 @@ export function clearUserCache(username) {
     }
   }
 }
+
+export async function fetchRepoCommits(owner, repo, count = 10) {
+  const cacheKey = `commits:${owner}/${repo}:${count}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/commits?per_page=${count}`
+    );
+    
+    if (!response.ok) {
+      if (response.status === 409) {
+        return [];
+      }
+      throw new Error('Failed to fetch commits');
+    }
+    
+    const commits = await response.json();
+    
+    const formattedCommits = commits.map(commit => ({
+      sha: commit.sha.substring(0, 7),
+      message: commit.commit.message.split('\n')[0].substring(0, 72),
+      author: commit.commit.author.name,
+      date: commit.commit.author.date,
+      html_url: commit.html_url
+    }));
+    
+    cache.set(cacheKey, formattedCommits);
+    return formattedCommits;
+  } catch (error) {
+    throw new Error(`Failed to fetch commits: ${error.message}`);
+  }
+}
