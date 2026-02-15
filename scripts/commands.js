@@ -55,16 +55,25 @@ export function resolvePath(currentPath, path) {
 
 /**
  * Parse path into owner, repo, and internal path
+ * 
+ * Path structure:
+ *   /                    → root (list all repos)
+ *   /reponame            → root of a repo
+ *   /reponame/path/file  → a file inside repo
  */
 export function parsePath(githubUser, path) {
   const parts = path.replace(/^\/|\/$/g, '').split('/').filter(p => p);
   
   if (parts.length === 0) {
+    // Root - list all repos
     return { owner: null, repo: null, path: '' };
-  } else if (parts.length === 1) {
-    return { owner: githubUser, repo: parts[0], path: '' };
   } else {
-    return { owner: githubUser, repo: parts[1], path: parts.slice(2).join('/') };
+    // First part is always the repo name, rest is the path inside repo
+    return { 
+      owner: githubUser, 
+      repo: parts[0], 
+      path: parts.slice(1).join('/') 
+    };
   }
 }
 
