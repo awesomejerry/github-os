@@ -1,0 +1,96 @@
+/* GitHub OS - Main Stylesheet */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #0d1117;
+  color: #c9d1d9;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Consolas', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#terminal {
+  height: 100vh;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#output {
+  flex: 1;
+  margin-bottom: 10px;
+}
+
+.line {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin-bottom: 4px;
+}
+
+/* Colors */
+.prompt { color: #58a6ff; }
+.command { color: #c9d1d9; }
+.error { color: #f85149; }
+.success { color: #3fb950; }
+.info { color: #8b949e; }
+.directory { color: #58a6ff; }
+.file { color: #c9d1d9; }
+.symlink { color: #8b949e; }
+.welcome { color: #58a6ff; font-weight: bold; }
+.emoji { font-style: normal; }
+
+/* Input Line */
+#input-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#input-prompt {
+  color: #58a6ff;
+  white-space: nowrap;
+}
+
+#command-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #c9d1d9;
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  caret-color: #c9d1d9;
+}
+
+/* Code Blocks */
+pre {
+  margin: 8px 0;
+  padding: 12px;
+  background: #161b22;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+pre code {
+  font-family: inherit;
+  font-size: 13px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  body {
+    font-size: 12px;
+  }
+  
+  #terminal {
+    padding: 12px;
+  }
+}
