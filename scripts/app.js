@@ -86,14 +86,15 @@ Type <span class="info">'help'</span> for available commands.
   async handleTabComplete(input) {
     const tabState = this.terminal.getTabState();
     
-    // If tab state is active and input matches, cycle through matches
-    if (tabState.active && tabState.originalInput === input && tabState.matches.length > 1) {
+    // If tab state is active and input matches last completion, cycle through matches
+    if (tabState.active && tabState.lastInput === input && tabState.matches.length > 1) {
       tabState.index = (tabState.index + 1) % tabState.matches.length;
       this.terminal.setTabState(tabState);
       
       const match = tabState.matches[tabState.index];
-      const completed = this.buildCompletion(tabState, match);
+      const completed = this.buildCompletion(tabState.context, match);
       this.terminal.setInput(completed);
+      this.terminal.setTabState({ lastInput: completed });
       return;
     }
     
@@ -108,6 +109,7 @@ Type <span class="info">'help'</span> for available commands.
       // Single match - complete it
       const completed = this.buildCompletion(result, result.matches[0]);
       this.terminal.setInput(completed);
+      this.terminal.resetTabState();
       return;
     }
     
@@ -119,7 +121,7 @@ Type <span class="info">'help'</span> for available commands.
       active: true,
       matches: result.matches,
       index: 0,
-      originalInput: input,
+      lastInput: completed,
       context: result
     });
     

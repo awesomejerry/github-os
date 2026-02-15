@@ -61,12 +61,10 @@ export class Terminal {
       } else if (e.key === 'Tab') {
         e.preventDefault();
         await this.onTabComplete(this.input.value);
+      } else if (e.key !== 'Shift' && e.key !== 'Control' && e.key !== 'Alt' && e.key !== 'Meta') {
+        // Regular character or special key (not a modifier) - reset tab state
+        this.resetTabState();
       }
-    });
-
-    // Reset tab state on input change (typing)
-    this.input.addEventListener('input', () => {
-      this.resetTabState();
     });
 
     // Focus input on click
