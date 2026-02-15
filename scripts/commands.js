@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml } from './utils.js';
 import { LANGUAGE_MAP } from './config.js';
 
@@ -15,7 +15,15 @@ export const commands = {
   cat: cmdCat,
   tree: cmdTree,
   clear: cmdClear,
-  exit: cmdExit
+  exit: cmdExit,
+  // Phase 2 commands
+  whoami: cmdWhoami,
+  connect: cmdConnect,
+  info: cmdInfo,
+  readme: cmdReadme,
+  head: cmdHead,
+  tail: cmdTail,
+  download: cmdDownload
 };
 
 /**
@@ -60,24 +68,90 @@ export function parsePath(githubUser, path) {
   }
 }
 
+/**
+ * Get completions for tab completion
+ */
+export async function getCompletions(githubUser, currentPath, partial) {
+  const parts = partial.split(' ');
+  const lastPart = parts[parts.length - 1];
+  
+  if (parts.length < 2) return null; // Need at least command + partial path
+  
+  const partialPath = lastPart;
+  const dirPath = partialPath.includes('/') 
+    ? partialPath.substring(0, partialPath.lastIndexOf('/'))
+    : '';
+  const prefix = partialPath.includes('/')
+    ? partialPath.substring(partialPath.lastIndexOf('/') + 1)
+    : partialPath;
+  
+  const targetDir = dirPath ? resolvePath(currentPath, dirPath) : currentPath;
+  const parsed = parsePath(githubUser, targetDir);
+  
+  try {
+    let items = [];
+    
+    if (targetDir === '/') {
+      // Complete from repo names
+      const repos = await fetchUserRepos(githubUser);
+      items = repos.map(r => r.name + '/');
+    } else {
+      // Complete from directory contents
+      const contents = await fetchRepoContents(parsed.owner, parsed.repo, parsed.path);
+      if (Array.isArray(contents)) {
+        items = contents.map(item => item.name + (item.type === 'dir' ? '/' : ''));
+      }
+    }
+    
+    const matches = items.filter(item => 
+      item.toLowerCase().startsWith(prefix.toLowerCase())
+    );
+    
+    if (matches.length === 1) {
+      const baseCmd = parts.slice(0, -1).join(' ');
+      const completion = dirPath ? `${dirPath}/${matches[0]}` : matches[0];
+      return baseCmd ? `${baseCmd} ${completion}` : completion;
+    } else if (matches.length > 1) {
+      return { matches, prefix: partial };
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Command implementations
 
 function cmdHelp(terminal) {
   const help = `
 <span class="success">Available Commands:</span>
 
+ <span class="info">Navigation</span>
   <span class="info">ls</span> [path]        List directory contents
-  <span class="info">cd</span> &lt;path&gt;        Change directory
+  <span class="info">cd</span> &lt;path&gt;        Change directory (use <span class="success">cd -</span> to go back)
   <span class="info">pwd</span>               Print working directory
+
+ <span class="info">File Operations</span>
   <span class="info">cat</span> &lt;file&gt;        Display file contents
+  <span class="info">head</span> &lt;file&gt; [n]   Display first n lines (default: 10)
+  <span class="info">tail</span> &lt;file&gt; [n]   Display last n lines (default: 10)
+  <span class="info">readme</span>            Display README.md in current directory
+  <span class="info">download</span> &lt;file&gt;  Download file to your computer
+
+ <span class="info">Repository</span>
   <span class="info">tree</span> [path]       Display directory tree
+  <span class="info">info</span>              Show repository details
+  <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
+  <span class="info">whoami</span>            Show current GitHub user
+
+ <span class="info">Other</span>
   <span class="info">clear</span>             Clear terminal screen
   <span class="info">help</span>              Show this help message
   <span class="info">exit</span>              Exit terminal
 
 <span class="info">Tips:</span>
-  - Use <span class="success">cd ..</span> to go up one directory
-  - Use <span class="success">cd /</span> to go to root (repository list)
+  - Press <span class="success">Tab</span> to auto-complete paths
   - Press <span class="success">↑/↓</span> to navigate command history
 `;
   terminal.print(help);
@@ -130,6 +204,22 @@ async function cmdLs(terminal, githubUser, args) {
 async function cmdCd(terminal, githubUser, args) {
   if (args.length === 0) {
     terminal.print(`<span class="error">Usage: cd &lt;directory&gt;</span>`);
+    return;
+  }
+
+  // Handle cd - (go to previous directory)
+  if (args[0] === '-') {
+    const prevPath = terminal.getPreviousPath();
+    if (!prevPath) {
+      terminal.print(`<span class="error">No previous directory</span>`);
+      return;
+    }
+    // Swap current and previous
+    const current = terminal.getPath();
+    terminal.setPath(prevPath);
+    terminal.print(`<span class="info">${prevPath}</span>`);
+    // Restore previous path for next cd -
+    terminal.previousPath = current;
     return;
   }
 
@@ -186,6 +276,195 @@ async function cmdCat(terminal, githubUser, args) {
     terminal.printCode(content, lang);
   } catch (error) {
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdHead(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: head &lt;file&gt; [lines]</span>`);
+    return;
+  }
+
+  const targetPath = resolvePath(terminal.getPath(), args[0]);
+  const numLines = args[1] ? parseInt(args[1]) : 10;
+  const parsed = parsePath(githubUser, targetPath);
+
+  if (targetPath === '/' || parsed.path === '') {
+    terminal.print(`<span class="error">Not a file</span>`);
+    return;
+  }
+
+  try {
+    const { content, name } = await fetchFileContent(parsed.owner, parsed.repo, parsed.path);
+    const lines = content.split('\n').slice(0, numLines);
+    const lang = getLanguageForFile(name, LANGUAGE_MAP);
+    terminal.printCode(lines.join('\n'), lang);
+    terminal.print(`<span class="info">Showing first ${Math.min(numLines, lines.length)} lines</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdTail(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: tail &lt;file&gt; [lines]</span>`);
+    return;
+  }
+
+  const targetPath = resolvePath(terminal.getPath(), args[0]);
+  const numLines = args[1] ? parseInt(args[1]) : 10;
+  const parsed = parsePath(githubUser, targetPath);
+
+  if (targetPath === '/' || parsed.path === '') {
+    terminal.print(`<span class="error">Not a file</span>`);
+    return;
+  }
+
+  try {
+    const { content, name } = await fetchFileContent(parsed.owner, parsed.repo, parsed.path);
+    const lines = content.split('\n').slice(-numLines);
+    const lang = getLanguageForFile(name, LANGUAGE_MAP);
+    terminal.printCode(lines.join('\n'), lang);
+    terminal.print(`<span class="info">Showing last ${lines.length} lines</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdReadme(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  
+  // Try common README files
+  const readmeNames = ['README.md', 'readme.md', 'README', 'readme', 'README.txt'];
+  
+  for (const readmeName of readmeNames) {
+    const readmePath = parsed.path ? `${parsed.path}/${readmeName}` : readmeName;
+    try {
+      const { content, name } = await fetchFileContent(parsed.owner, parsed.repo, readmePath);
+      terminal.printCode(content, 'markdown');
+      return;
+    } catch {
+      // Try next variant
+      continue;
+    }
+  }
+  
+  terminal.print(`<span class="error">No README file found in current directory</span>`);
+}
+
+async function cmdDownload(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: download &lt;file&gt;</span>`);
+    return;
+  }
+
+  const targetPath = resolvePath(terminal.getPath(), args[0]);
+  const parsed = parsePath(githubUser, targetPath);
+
+  if (targetPath === '/' || parsed.path === '') {
+    terminal.print(`<span class="error">Not a file</span>`);
+    return;
+  }
+
+  try {
+    // Get the download URL from GitHub API
+    const response = await fetch(
+      `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/contents/${parsed.path}`
+    );
+    
+    if (!response.ok) throw new Error('File not found');
+    
+    const file = await response.json();
+    
+    if (file.type !== 'file') throw new Error('Not a file');
+    
+    // Create download link
+    const downloadUrl = file.download_url;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    terminal.print(`<span class="success">Downloading: ${file.name}</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdInfo(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  
+  try {
+    const info = await getRepoInfo(parsed.owner, parsed.repo);
+    
+    terminal.print('');
+    terminal.print(`<span class="success">${info.full_name}</span>`);
+    if (info.description) {
+      terminal.print(`<span class="info">${info.description}</span>`);
+    }
+    terminal.print('');
+    terminal.print(`<span class="info">Language:</span>  ${info.language || 'N/A'}`);
+    terminal.print(`<span class="info">Stars:</span>     ★ ${info.stars}`);
+    terminal.print(`<span class="info">Forks:</span>     ${info.forks}`);
+    terminal.print(`<span class="info">Watchers:</span>  ${info.watchers}`);
+    terminal.print(`<span class="info">License:</span>   ${info.license}`);
+    if (info.topics.length > 0) {
+      terminal.print(`<span class="info">Topics:</span>    ${info.topics.join(', ')}`);
+    }
+    if (info.homepage) {
+      terminal.print(`<span class="info">Homepage:</span>  ${info.homepage}`);
+    }
+    terminal.print('');
+    terminal.print(`<span class="info">URL:</span> ${info.html_url}`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+function cmdWhoami(terminal, githubUser) {
+  terminal.print(`<span class="info">GitHub user:</span> <span class="success">${githubUser}</span>`);
+}
+
+async function cmdConnect(terminal, githubUser, args, app) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: connect &lt;github-username&gt;</span>`);
+    return;
+  }
+
+  const newUser = args[0];
+  
+  try {
+    // Verify the user exists by fetching repos
+    terminal.print(`<span class="info">Connecting to ${newUser}...</span>`);
+    const repos = await fetchUserRepos(newUser);
+    
+    // Update the app's github user
+    if (app && app.setGithubUser) {
+      app.setGithubUser(newUser);
+    }
+    
+    // Reset to root
+    terminal.setPath('/');
+    
+    terminal.print(`<span class="success">Connected to ${newUser} (${repos.length} repositories)</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: Could not connect to ${newUser}. User may not exist.</span>`);
   }
 }
 

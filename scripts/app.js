@@ -1,9 +1,10 @@
 // GitHub OS - Main Application
 
 import { Terminal } from './terminal.js';
-import { commands } from './commands.js';
+import { commands, getCompletions } from './commands.js';
 import { detectGitHubUser } from './utils.js';
 import { DEFAULT_GITHUB_USER } from './config.js';
+import { clearUserCache } from './github.js';
 
 class GitHubOS {
   constructor() {
@@ -12,6 +13,9 @@ class GitHubOS {
     
     // Set up command handler
     this.terminal.onCommand = this.executeCommand.bind(this);
+    
+    // Set up tab completion
+    this.terminal.onTabComplete = this.handleTabComplete.bind(this);
   }
 
   /**
@@ -33,7 +37,7 @@ class GitHubOS {
    */
   printWelcome() {
     const welcomeText = `
-<span class="welcome">Welcome to GitHub OS v1.0.0</span>
+<span class="welcome">Welcome to GitHub OS v1.1.0</span>
 Connecting to GitHub user: <span class="success">${this.githubUser}</span>
 
 Type <span class="info">'help'</span> for available commands.
@@ -68,12 +72,37 @@ Type <span class="info">'help'</span> for available commands.
 
     // Execute command
     if (commands[cmd]) {
-      await commands[cmd](this.terminal, this.githubUser, args);
+      await commands[cmd](this.terminal, this.githubUser, args, this);
     } else {
       this.terminal.print(`<span class="error">Command not found: ${cmd}. Type 'help' for available commands.</span>`);
     }
     
     this.terminal.print(''); // Add spacing
+  }
+
+  /**
+   * Handle tab completion
+   */
+  async handleTabComplete(input) {
+    const completion = await getCompletions(this.githubUser, this.terminal.getPath(), input);
+    
+    if (typeof completion === 'string') {
+      // Single match - complete it
+      this.terminal.setInput(completion + ' ');
+    } else if (completion && completion.matches) {
+      // Multiple matches - show them
+      this.terminal.print(`<span class="prompt">${this.terminal.promptEl.textContent}</span> <span class="command">${input}</span>`);
+      const matchStr = completion.matches.join('  ');
+      this.terminal.print(matchStr);
+    }
+  }
+
+  /**
+   * Set GitHub user (for connect command)
+   */
+  setGithubUser(username) {
+    this.githubUser = username;
+    clearUserCache(username);
   }
 }
 

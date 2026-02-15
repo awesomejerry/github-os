@@ -13,6 +13,7 @@ export class Terminal {
     this.commandHistory = [];
     this.historyIndex = -1;
     this.currentPath = '/';
+    this.previousPath = null;
     
     this.setupEventListeners();
   }
@@ -48,7 +49,7 @@ export class Terminal {
         }
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        // Tab completion could be added here
+        await this.onTabComplete(this.input.value);
       }
     });
 
@@ -56,6 +57,14 @@ export class Terminal {
     this.terminal.addEventListener('click', () => {
       this.input.focus();
     });
+  }
+
+  /**
+   * Tab completion handler - to be set by app
+   */
+  onTabComplete = async (input) => {
+    // Override this in app.js
+    console.log('Tab complete:', input);
   }
 
   /**
@@ -123,6 +132,7 @@ export class Terminal {
    * Set current path
    */
   setPath(path) {
+    this.previousPath = this.currentPath;
     this.currentPath = path;
     this.updatePrompt();
   }
@@ -132,6 +142,13 @@ export class Terminal {
    */
   getPath() {
     return this.currentPath;
+  }
+
+  /**
+   * Get previous path
+   */
+  getPreviousPath() {
+    return this.previousPath;
   }
 
   /**
@@ -146,5 +163,19 @@ export class Terminal {
    */
   focus() {
     this.input.focus();
+  }
+
+  /**
+   * Set input value
+   */
+  setInput(value) {
+    this.input.value = value;
+  }
+
+  /**
+   * Get input value
+   */
+  getInput() {
+    return this.input.value;
   }
 }
