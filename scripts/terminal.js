@@ -157,7 +157,11 @@ export class Terminal {
    * Scroll to bottom of terminal
    */
   scrollToBottom() {
-    this.terminal.scrollTop = this.terminal.scrollHeight;
+    // Only auto-scroll if the user is at or near the bottom
+    const isScrolledToBottom = this.terminal.scrollHeight - this.terminal.clientHeight <= this.terminal.scrollTop + 1; // +1 for a small buffer
+    if (isScrolledToBottom) {
+      this.terminal.scrollTop = this.terminal.scrollHeight;
+    }
   }
 
   /**
