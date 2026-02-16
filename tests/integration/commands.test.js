@@ -103,4 +103,25 @@ describe('Commands', () => {
       expect(output).toMatch(/goodbye|exit/i);
     });
   });
+
+  describe('Command Registry - issues command', () => {
+    it('should have issues command registered', async () => {
+      const { commands } = await import('../../scripts/commands.js');
+      
+      expect(commands).toHaveProperty('issues');
+      expect(typeof commands.issues).toBe('function');
+    });
+  });
+
+  describe('help command with issues', () => {
+    it('should display issues command in help text', async () => {
+      const terminal = createMockTerminal();
+      const { commands } = await import('../../scripts/commands.js');
+      
+      await commands.help(terminal, 'testuser', []);
+      
+      const output = terminal.outputs.join('\n');
+      expect(output).toContain('issues');
+    });
+  });
 });

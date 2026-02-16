@@ -346,3 +346,42 @@ export async function fetchRepoTree(owner, repo, branch = 'main') {
     throw new Error(`Failed to fetch tree: ${error.message}`);
   }
 }
+
+export async function fetchRepoIssues(owner, repo, state = 'open') {
+  const cacheKey = `issues:${owner}/${repo}:${state}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues?state=${state}&per_page=30`
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch issues');
+    }
+    
+    const issues = await response.json();
+    
+    const formattedIssues = issues
+      .filter(issue => !issue.pull_request)
+      .map(issue => ({
+        number: issue.number,
+        title: issue.title,
+        author: issue.user.login,
+        labels: issue.labels.map(label => label.name),
+        created_at: issue.created_at,
+        state: issue.state,
+        html_url: issue.html_url
+      }));
+    
+    cache.set(cacheKey, formattedIssues);
+    return formattedIssues;
+  } catch (error) {
+    throw new Error(`Failed to fetch issues: ${error.message}`);
+  }
+}

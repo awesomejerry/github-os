@@ -211,4 +211,98 @@ describe('GitHub API Functions', () => {
       expect(keysAfter.some(k => k.includes('user1'))).toBe(false);
     });
   });
+
+  describe('fetchRepoIssues', () => {
+    it('should fetch and format issues', async () => {
+      const mockIssues = [
+        {
+          number: 1,
+          title: 'Bug in login',
+          user: { login: 'alice' },
+          labels: [{ name: 'bug' }, { name: 'high' }],
+          created_at: '2026-02-16T10:00:00Z',
+          state: 'open',
+          html_url: 'https://github.com/user/repo/issues/1'
+        },
+        {
+          number: 2,
+          title: 'Feature request',
+          user: { login: 'bob' },
+          labels: [{ name: 'enhancement' }],
+          created_at: '2026-02-15T10:00:00Z',
+          state: 'open',
+          html_url: 'https://github.com/user/repo/issues/2'
+        }
+      ];
+      setMockResponse('/issues', mockIssues);
+
+      const { fetchRepoIssues, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const issues = await fetchRepoIssues('user', 'repo', 'open');
+      
+      expect(issues).toHaveLength(2);
+      expect(issues[0].number).toBe(1);
+      expect(issues[0].title).toBe('Bug in login');
+      expect(issues[0].author).toBe('alice');
+      expect(issues[0].labels).toEqual(['bug', 'high']);
+      expect(issues[0].state).toBe('open');
+    });
+
+    it('should filter out pull requests', async () => {
+      const mockIssues = [
+        {
+          number: 1,
+          title: 'Real issue',
+          user: { login: 'alice' },
+          labels: [],
+          created_at: '2026-02-16T10:00:00Z',
+          state: 'open',
+          html_url: 'https://github.com/user/repo/issues/1'
+        },
+        {
+          number: 2,
+          title: 'Pull request',
+          user: { login: 'bob' },
+          labels: [],
+          created_at: '2026-02-15T10:00:00Z',
+          state: 'open',
+          pull_request: { url: 'https://api.github.com/repos/user/repo/pulls/2' },
+          html_url: 'https://github.com/user/repo/pull/2'
+        }
+      ];
+      setMockResponse('/issues', mockIssues);
+
+      const { fetchRepoIssues, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const issues = await fetchRepoIssues('user', 'repo', 'open');
+      
+      expect(issues).toHaveLength(1);
+      expect(issues[0].number).toBe(1);
+      expect(issues[0].title).toBe('Real issue');
+    });
+
+    it('should cache issues results', async () => {
+      setMockResponse('/issues', []);
+      
+      const { fetchRepoIssues, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      await fetchRepoIssues('user', 'repo', 'open');
+      await fetchRepoIssues('user', 'repo', 'open');
+      
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return empty array for no issues', async () => {
+      setMockResponse('/issues', []);
+
+      const { fetchRepoIssues, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const issues = await fetchRepoIssues('user', 'repo', 'open');
+      expect(issues).toEqual([]);
+    });
+  });
 });

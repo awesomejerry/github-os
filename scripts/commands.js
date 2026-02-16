@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP } from './config.js';
 
@@ -28,7 +28,9 @@ export const commands = {
   grep: cmdGrep,
   log: cmdLog,
   branch: cmdBranch,
-  find: cmdFind
+  find: cmdFind,
+  // Phase 4 commands
+  issues: cmdIssues
 };
 
 /**
@@ -92,7 +94,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -161,13 +163,14 @@ function cmdHelp(terminal) {
   <span class="info">download</span> &lt;file&gt;  Download file to your computer
 
  <span class="info">Repository</span>
-   <span class="info">tree</span> [path]       Display directory tree
-   <span class="info">info</span>              Show repository details
-   <span class="info">log</span> [count]       Show commit history (default: 10)
-   <span class="info">branch</span>            List all branches (default marked with *)
-   <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
-   <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
-   <span class="info">whoami</span>            Show current GitHub user
+    <span class="info">tree</span> [path]       Display directory tree
+    <span class="info">info</span>              Show repository details
+    <span class="info">log</span> [count]       Show commit history (default: 10)
+    <span class="info">branch</span>            List all branches (default marked with *)
+    <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
+    <span class="info">issues</span> [--closed|--all]   List repository issues (default: open)
+    <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
+    <span class="info">whoami</span>            Show current GitHub user
 
  <span class="info">Other</span>
   <span class="info">clear</span>             Clear terminal screen
@@ -775,6 +778,43 @@ async function cmdFind(terminal, githubUser, args) {
       terminal.print(`  <span class="file">${file.path}</span>`);
     });
     terminal.print(`\n<span class="info">${matches.length} file(s) found</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdIssues(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  
+  const showAll = args.includes('--all');
+  const showClosed = args.includes('--closed');
+  const state = showAll ? 'all' : (showClosed ? 'closed' : 'open');
+
+  try {
+    const issues = await fetchRepoIssues(parsed.owner, parsed.repo, state);
+    
+    if (issues.length === 0) {
+      const stateDesc = showAll ? '' : (showClosed ? 'closed ' : 'open ');
+      terminal.print(`<span class="info">No ${stateDesc}issues found</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    issues.forEach(issue => {
+      const labels = issue.labels.length > 0 
+        ? ` <span class="info">[${issue.labels.join(', ')}]</span>` 
+        : '';
+      const relativeDate = formatRelativeDate(issue.created_at);
+      terminal.print(`<span class="success">#${issue.number}</span> ${escapeHtml(issue.title)} <span class="info">@${issue.author}</span>${labels} <span class="info">(${relativeDate})</span>`);
+    });
+    terminal.print(`\n<span class="info">${issues.length} issue(s)</span>`);
   } catch (error) {
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
