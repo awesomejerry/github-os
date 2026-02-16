@@ -13,6 +13,26 @@ export function getCache() {
 }
 
 /**
+ * Check if response indicates rate limit exceeded
+ */
+function checkRateLimit(response) {
+  if (response.status === 403) {
+    const remaining = response.headers.get('X-RateLimit-Remaining');
+    const reset = response.headers.get('X-RateLimit-Reset');
+    
+    if (remaining === '0' || response.status === 403) {
+      let message = 'GitHub API rate limit exceeded';
+      if (reset) {
+        const resetTime = new Date(parseInt(reset) * 1000);
+        const minutes = Math.ceil((resetTime - new Date()) / 60000);
+        message += `. Try again in ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+      }
+      throw new Error(message);
+    }
+  }
+}
+
+/**
  * Fetch user's public repositories
  */
 export async function fetchUserRepos(username) {
@@ -27,6 +47,7 @@ export async function fetchUserRepos(username) {
       `${GITHUB_API.BASE_URL}/users/${username}/repos?per_page=${GITHUB_API.REPOS_PER_PAGE}&sort=updated`
     );
     
+    checkRateLimit(response);
     if (!response.ok) throw new Error('User not found');
     
     const repos = await response.json();

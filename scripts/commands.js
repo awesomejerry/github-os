@@ -1,7 +1,7 @@
 // GitHub OS - Commands
 
 import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree } from './github.js';
-import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate } from './utils.js';
+import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP } from './config.js';
 
 /**
@@ -410,8 +410,13 @@ async function cmdDownload(terminal, githubUser, args) {
     
     if (file.type !== 'file') throw new Error('Not a file');
     
-    // Create download link
+    // Security: Validate download URL is from GitHub
     const downloadUrl = file.download_url;
+    if (!isValidGitHubUrl(downloadUrl)) {
+      throw new Error('Invalid download URL - security check failed');
+    }
+    
+    // Create download link
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = file.name;
@@ -419,9 +424,9 @@ async function cmdDownload(terminal, githubUser, args) {
     link.click();
     document.body.removeChild(link);
     
-    terminal.print(`<span class="success">Downloading: ${file.name}</span>`);
+    terminal.print(`<span class="success">Downloading: ${escapeHtml(file.name)}</span>`);
   } catch (error) {
-    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
   }
 }
 
@@ -557,6 +562,14 @@ async function cmdGrep(terminal, githubUser, args) {
   }
 
   const pattern = args[0];
+  
+  // Security: Validate pattern to prevent ReDoS
+  const validation = validatePattern(pattern, 100);
+  if (!validation.valid) {
+    terminal.print(`<span class="error">Invalid pattern: ${validation.error}</span>`);
+    return;
+  }
+  
   const caseInsensitive = args.includes('-i');
   const filePath = args.find(a => !a.startsWith('-') && a !== pattern);
 
