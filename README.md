@@ -29,6 +29,8 @@ A web-based terminal interface that mimics a VM file system, browsing GitHub rep
 | `branch` | List all branches (default marked with *) |
 | `find <pattern>` | Find files by name pattern |
 | `issues [--closed\|--all]` | List repository issues (default: open) |
+| `releases [count]` | List repository releases (default: 10) |
+| `contributors [count]` | List repository contributors (default: 20) |
 | `clear` | Clear terminal screen |
 | `help` | Show available commands |
 | `exit` | Exit terminal |

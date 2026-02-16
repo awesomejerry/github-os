@@ -21,7 +21,7 @@ describe('Commands', () => {
       const expectedCommands = [
         'help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit',
         'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download',
-        'grep', 'log', 'branch', 'find'
+        'grep', 'log', 'branch', 'find', 'issues', 'contributors'
       ];
       
       expectedCommands.forEach(cmd => {
@@ -122,6 +122,27 @@ describe('Commands', () => {
       
       const output = terminal.outputs.join('\n');
       expect(output).toContain('issues');
+    });
+  });
+
+  describe('Command Registry - contributors command', () => {
+    it('should have contributors command registered', async () => {
+      const { commands } = await import('../../scripts/commands.js');
+      
+      expect(commands).toHaveProperty('contributors');
+      expect(typeof commands.contributors).toBe('function');
+    });
+  });
+
+  describe('help command with contributors', () => {
+    it('should display contributors command in help text', async () => {
+      const terminal = createMockTerminal();
+      const { commands } = await import('../../scripts/commands.js');
+      
+      await commands.help(terminal, 'testuser', []);
+      
+      const output = terminal.outputs.join('\n');
+      expect(output).toContain('contributors');
     });
   });
 });

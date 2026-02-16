@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP } from './config.js';
 
@@ -30,7 +30,9 @@ export const commands = {
   branch: cmdBranch,
   find: cmdFind,
   // Phase 4 commands
-  issues: cmdIssues
+  issues: cmdIssues,
+  contributors: cmdContributors,
+  releases: cmdReleases
 };
 
 /**
@@ -94,7 +96,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -169,6 +171,8 @@ function cmdHelp(terminal) {
     <span class="info">branch</span>            List all branches (default marked with *)
     <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
     <span class="info">issues</span> [--closed|--all]   List repository issues (default: open)
+    <span class="info">releases</span> [count]  List repository releases (default: 10)
+    <span class="info">contributors</span> [count]     List repository contributors (default: 20)
     <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
     <span class="info">whoami</span>            Show current GitHub user
 
@@ -815,6 +819,78 @@ async function cmdIssues(terminal, githubUser, args) {
       terminal.print(`<span class="success">#${issue.number}</span> ${escapeHtml(issue.title)} <span class="info">@${issue.author}</span>${labels} <span class="info">(${relativeDate})</span>`);
     });
     terminal.print(`\n<span class="info">${issues.length} issue(s)</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdContributors(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const count = args[0] ? parseInt(args[0]) : 20;
+  
+  if (isNaN(count) || count < 1) {
+    terminal.print(`<span class="error">Invalid count. Usage: contributors [count]</span>`);
+    return;
+  }
+
+  try {
+    const contributors = await fetchRepoContributors(parsed.owner, parsed.repo, count);
+    
+    if (contributors.length === 0) {
+      terminal.print(`<span class="info">No contributors found</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    contributors.forEach(contributor => {
+      terminal.print(`👤 <span class="info">@${contributor.login}</span>  <span class="success">${contributor.contributions}</span> contributions`);
+    });
+    terminal.print(`\n<span class="info">${contributors.length} contributor(s)</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdReleases(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const count = args[0] ? parseInt(args[0]) : 10;
+  
+  if (isNaN(count) || count < 1) {
+    terminal.print(`<span class="error">Invalid count. Usage: releases [count]</span>`);
+    return;
+  }
+
+  try {
+    const releases = await fetchRepoReleases(parsed.owner, parsed.repo, count);
+    
+    if (releases.length === 0) {
+      terminal.print(`<span class="info">No releases found</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    releases.forEach(release => {
+      const prerelease = release.prerelease 
+        ? ` <span class="warning">[pre-release]</span>` 
+        : '';
+      const relativeDate = formatRelativeDate(release.published_at);
+      terminal.print(`<span class="success">${release.tag_name}</span> ${escapeHtml(release.name)} <span class="info">@${release.author}</span> <span class="info">(${relativeDate})</span>${prerelease}`);
+    });
+    terminal.print(`\n<span class="info">${releases.length} release(s)</span>`);
   } catch (error) {
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }

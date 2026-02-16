@@ -305,4 +305,67 @@ describe('GitHub API Functions', () => {
       expect(issues).toEqual([]);
     });
   });
+
+  describe('fetchRepoContributors', () => {
+    it('should fetch and format contributors', async () => {
+      const mockContributors = [
+        {
+          login: 'alice',
+          avatar_url: 'https://avatars.githubusercontent.com/u/1',
+          contributions: 100,
+          html_url: 'https://github.com/alice'
+        },
+        {
+          login: 'bob',
+          avatar_url: 'https://avatars.githubusercontent.com/u/2',
+          contributions: 50,
+          html_url: 'https://github.com/bob'
+        }
+      ];
+      setMockResponse('/contributors', mockContributors);
+
+      const { fetchRepoContributors, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const contributors = await fetchRepoContributors('user', 'repo', 20);
+      
+      expect(contributors).toHaveLength(2);
+      expect(contributors[0].login).toBe('alice');
+      expect(contributors[0].contributions).toBe(100);
+      expect(contributors[1].login).toBe('bob');
+      expect(contributors[1].contributions).toBe(50);
+    });
+
+    it('should cache contributors results', async () => {
+      setMockResponse('/contributors', []);
+      
+      const { fetchRepoContributors, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      await fetchRepoContributors('user', 'repo', 20);
+      await fetchRepoContributors('user', 'repo', 20);
+      
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return empty array for 204 response (stats not ready)', async () => {
+      global.fetch = vi.fn(async () => ({ ok: true, status: 204 }));
+
+      const { fetchRepoContributors, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const contributors = await fetchRepoContributors('user', 'repo', 20);
+      expect(contributors).toEqual([]);
+    });
+
+    it('should return empty array for no contributors', async () => {
+      setMockResponse('/contributors', []);
+
+      const { fetchRepoContributors, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const contributors = await fetchRepoContributors('user', 'repo', 20);
+      expect(contributors).toEqual([]);
+    });
+  });
 });

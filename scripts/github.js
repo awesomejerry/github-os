@@ -385,3 +385,77 @@ export async function fetchRepoIssues(owner, repo, state = 'open') {
     throw new Error(`Failed to fetch issues: ${error.message}`);
   }
 }
+
+export async function fetchRepoReleases(owner, repo, count = 10) {
+  const cacheKey = `releases:${owner}/${repo}:${count}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/releases?per_page=${count}`
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch releases');
+    }
+    
+    const releases = await response.json();
+    
+    const formattedReleases = releases.map(release => ({
+      tag_name: release.tag_name,
+      name: release.name || release.tag_name,
+      author: release.author?.login || 'unknown',
+      published_at: release.published_at,
+      prerelease: release.prerelease,
+      html_url: release.html_url
+    }));
+    
+    cache.set(cacheKey, formattedReleases);
+    return formattedReleases;
+  } catch (error) {
+    throw new Error(`Failed to fetch releases: ${error.message}`);
+  }
+}
+
+export async function fetchRepoContributors(owner, repo, count = 20) {
+  const cacheKey = `contributors:${owner}/${repo}:${count}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contributors?per_page=${count}`
+    );
+    
+    checkRateLimit(response);
+    
+    if (response.status === 204) {
+      return [];
+    }
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch contributors');
+    }
+    
+    const contributors = await response.json();
+    
+    const formattedContributors = contributors.map(contributor => ({
+      login: contributor.login,
+      avatar_url: contributor.avatar_url,
+      contributions: contributor.contributions,
+      html_url: contributor.html_url
+    }));
+    
+    cache.set(cacheKey, formattedContributors);
+    return formattedContributors;
+  } catch (error) {
+    throw new Error(`Failed to fetch contributors: ${error.message}`);
+  }
+}
