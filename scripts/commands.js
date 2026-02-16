@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate } from './utils.js';
 import { LANGUAGE_MAP } from './config.js';
 
@@ -26,7 +26,8 @@ export const commands = {
   download: cmdDownload,
   // Phase 3 commands
   grep: cmdGrep,
-  log: cmdLog
+  log: cmdLog,
+  branch: cmdBranch
 };
 
 /**
@@ -90,7 +91,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -162,6 +163,7 @@ function cmdHelp(terminal) {
    <span class="info">tree</span> [path]       Display directory tree
    <span class="info">info</span>              Show repository details
    <span class="info">log</span> [count]       Show commit history (default: 10)
+   <span class="info">branch</span>            List all branches (default marked with *)
    <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
    <span class="info">whoami</span>            Show current GitHub user
 
@@ -675,6 +677,40 @@ async function cmdLog(terminal, githubUser, args) {
       terminal.print(`    ${escapeHtml(commit.message)}`);
     });
     terminal.print(`\n<span class="info">${commits.length} commit(s)</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdBranch(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  try {
+    const [branches, repoInfo] = await Promise.all([
+      fetchRepoBranches(parsed.owner, parsed.repo),
+      getRepoInfo(parsed.owner, parsed.repo)
+    ]);
+    
+    if (branches.length === 0) {
+      terminal.print(`<span class="info">No branches found</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    branches.forEach(branch => {
+      const isDefault = branch.name === repoInfo.default_branch;
+      const prefix = isDefault ? '* ' : '  ';
+      const className = isDefault ? 'success' : 'directory';
+      terminal.print(`${prefix}<span class="${className}">${branch.name}</span>`);
+    });
+    terminal.print(`\n<span class="info">${branches.length} branch(es)</span>`);
   } catch (error) {
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }

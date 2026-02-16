@@ -260,3 +260,33 @@ export async function fetchRepoCommits(owner, repo, count = 10) {
     throw new Error(`Failed to fetch commits: ${error.message}`);
   }
 }
+
+export async function fetchRepoBranches(owner, repo) {
+  const cacheKey = `branches:${owner}/${repo}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/branches?per_page=100`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch branches');
+    }
+    
+    const branches = await response.json();
+    
+    const formattedBranches = branches.map(branch => ({
+      name: branch.name,
+      protected: branch.protected || false
+    }));
+    
+    cache.set(cacheKey, formattedBranches);
+    return formattedBranches;
+  } catch (error) {
+    throw new Error(`Failed to fetch branches: ${error.message}`);
+  }
+}
