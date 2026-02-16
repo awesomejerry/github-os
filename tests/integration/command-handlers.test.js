@@ -20,7 +20,9 @@ function createMockTerminal(path = '/github-os') {
     setPath: vi.fn(),
     setTabState: vi.fn(),
     resetTabState: vi.fn(),
-    setGithubUser: vi.fn()
+    setGithubUser: vi.fn(),
+    showLoading: vi.fn(),
+    hideLoading: vi.fn()
   };
 }
 

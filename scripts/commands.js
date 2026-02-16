@@ -193,11 +193,13 @@ async function cmdLs(terminal, githubUser, args) {
   const targetPath = args[0] ? resolvePath(terminal.getPath(), args[0]) : terminal.getPath();
   const parsed = parsePath(githubUser, targetPath);
 
+  terminal.showLoading();
   try {
     if (targetPath === '/') {
       // List repositories
       const repos = await fetchUserRepos(githubUser);
       
+      terminal.hideLoading();
       terminal.print('');
       repos.forEach(repo => {
         const lang = repo.language ? ` [<span class="info">${repo.language}</span>]` : '';
@@ -211,6 +213,8 @@ async function cmdLs(terminal, githubUser, args) {
     } else {
       // List repo contents
       const contents = await fetchRepoContents(parsed.owner, parsed.repo, parsed.path);
+      
+      terminal.hideLoading();
       
       if (!Array.isArray(contents)) {
         terminal.print(`<span class="error">Not a directory</span>`);
@@ -229,6 +233,7 @@ async function cmdLs(terminal, githubUser, args) {
       terminal.print(`\n<span class="info">${contents.length} items</span>`);
     }
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
@@ -302,11 +307,14 @@ async function cmdCat(terminal, githubUser, args) {
     return;
   }
 
+  terminal.showLoading();
   try {
     const { content, name } = await fetchFileContent(parsed.owner, parsed.repo, parsed.path);
+    terminal.hideLoading();
     const lang = getLanguageForFile(name, LANGUAGE_MAP);
     terminal.printCode(content, lang);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
@@ -447,8 +455,10 @@ async function cmdInfo(terminal, githubUser, args) {
 
   const parsed = parsePath(githubUser, currentPath);
   
+  terminal.showLoading();
   try {
     const info = await getRepoInfo(parsed.owner, parsed.repo);
+    terminal.hideLoading();
     
     terminal.print('');
     terminal.print(`<span class="success">${info.full_name}</span>`);
@@ -470,6 +480,7 @@ async function cmdInfo(terminal, githubUser, args) {
     terminal.print('');
     terminal.print(`<span class="info">URL:</span> ${info.html_url}`);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
@@ -486,10 +497,11 @@ async function cmdConnect(terminal, githubUser, args, app) {
 
   const newUser = args[0];
   
+  terminal.showLoading(`Connecting to ${newUser}...`);
   try {
     // Verify the user exists by fetching repos
-    terminal.print(`<span class="info">Connecting to ${newUser}...</span>`);
     const repos = await fetchUserRepos(newUser);
+    terminal.hideLoading();
     
     // Update the app's github user
     if (app && app.setGithubUser) {
@@ -501,6 +513,7 @@ async function cmdConnect(terminal, githubUser, args, app) {
     
     terminal.print(`<span class="success">Connected to ${newUser} (${repos.length} repositories)</span>`);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: Could not connect to ${newUser}. User may not exist.</span>`);
   }
 }
@@ -509,7 +522,10 @@ async function cmdTree(terminal, githubUser, args) {
   const targetPath = args[0] ? resolvePath(terminal.getPath(), args[0]) : terminal.getPath();
   const parsed = parsePath(githubUser, targetPath);
 
+  terminal.showLoading();
+  
   if (targetPath === '/') {
+    terminal.hideLoading();
     terminal.print(`<span class="info">Repository listing (use 'ls' to see details):</span>\n`);
     const repos = await fetchUserRepos(githubUser);
     repos.forEach(repo => {
@@ -518,8 +534,8 @@ async function cmdTree(terminal, githubUser, args) {
     return;
   }
 
-  terminal.print(`<span class="info">Loading directory tree...</span>`);
   await printTreeRecursive(terminal, githubUser, parsed.owner, parsed.repo, parsed.path, '', 0);
+  terminal.hideLoading();
 }
 
 async function printTreeRecursive(terminal, githubUser, owner, repo, path, prefix, depth) {
@@ -589,6 +605,7 @@ async function cmdGrep(terminal, githubUser, args) {
 
   const parsed = parsePath(githubUser, currentPath);
 
+  terminal.showLoading(filePath ? undefined : `Searching for "${pattern}"...`);
   try {
     if (filePath) {
       // Single file grep
@@ -596,11 +613,14 @@ async function cmdGrep(terminal, githubUser, args) {
       const fileParsed = parsePath(githubUser, targetPath);
 
       if (!fileParsed.path) {
+        terminal.hideLoading();
         terminal.print(`<span class="error">Please specify a file, not a directory.</span>`);
         return;
       }
 
       const { content, name } = await fetchFileContent(fileParsed.owner, fileParsed.repo, fileParsed.path);
+      terminal.hideLoading();
+      
       const lines = content.split('\n');
       
       const regex = new RegExp(pattern, caseInsensitive ? 'gi' : 'g');
@@ -634,10 +654,9 @@ async function cmdGrep(terminal, githubUser, args) {
 
     } else {
       // Repo-wide search using GitHub API
-      terminal.print(`<span class="info">Searching repository for "${pattern}"...</span>`);
-      
       const searchPath = parsed.path || undefined;
       const results = await searchCode(parsed.owner, parsed.repo, pattern, searchPath);
+      terminal.hideLoading();
 
       if (results.length === 0) {
         terminal.print(`<span class="info">No matches found.</span>`);
@@ -651,6 +670,7 @@ async function cmdGrep(terminal, githubUser, args) {
       terminal.print(`\n<span class="info">Tip: Use 'grep "${pattern}" &lt;file&gt;' to see line matches.</span>`);
     }
   } catch (error) {
+    terminal.hideLoading();
     if (error.message === 'REQUIRE_AUTH') {
       // GitHub code search requires authentication
       const searchUrl = `https://github.com/${parsed.owner}/${parsed.repo}/search?q=${encodeURIComponent(pattern)}`;
@@ -684,8 +704,10 @@ async function cmdLog(terminal, githubUser, args) {
     return;
   }
 
+  terminal.showLoading();
   try {
     const commits = await fetchRepoCommits(parsed.owner, parsed.repo, count);
+    terminal.hideLoading();
     
     if (commits.length === 0) {
       terminal.print(`<span class="info">No commits yet</span>`);
@@ -700,6 +722,7 @@ async function cmdLog(terminal, githubUser, args) {
     });
     terminal.print(`\n<span class="info">${commits.length} commit(s)</span>`);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
@@ -714,11 +737,13 @@ async function cmdBranch(terminal, githubUser, args) {
 
   const parsed = parsePath(githubUser, currentPath);
 
+  terminal.showLoading();
   try {
     const [branches, repoInfo] = await Promise.all([
       fetchRepoBranches(parsed.owner, parsed.repo),
       getRepoInfo(parsed.owner, parsed.repo)
     ]);
+    terminal.hideLoading();
     
     if (branches.length === 0) {
       terminal.print(`<span class="info">No branches found</span>`);
@@ -734,6 +759,7 @@ async function cmdBranch(terminal, githubUser, args) {
     });
     terminal.print(`\n<span class="info">${branches.length} branch(es)</span>`);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
@@ -758,10 +784,9 @@ async function cmdFind(terminal, githubUser, args) {
   const parsed = parsePath(githubUser, currentPath);
   const pattern = args[0];
 
+  terminal.showLoading(`Searching for "${pattern}"...`);
   try {
     const repoInfo = await getRepoInfo(parsed.owner, parsed.repo);
-    terminal.print(`<span class="info">Searching for "${pattern}"...</span>`);
-    
     const files = await fetchRepoTree(parsed.owner, parsed.repo, repoInfo.default_branch);
     
     const regexPattern = pattern
@@ -771,6 +796,8 @@ async function cmdFind(terminal, githubUser, args) {
     
     const regex = new RegExp(regexPattern, 'i');
     const matches = files.filter(file => regex.test(file.path));
+    
+    terminal.hideLoading();
     
     if (matches.length === 0) {
       terminal.print(`<span class="info">No files found matching "${pattern}"</span>`);
@@ -783,6 +810,7 @@ async function cmdFind(terminal, githubUser, args) {
     });
     terminal.print(`\n<span class="info">${matches.length} file(s) found</span>`);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
@@ -801,8 +829,10 @@ async function cmdIssues(terminal, githubUser, args) {
   const showClosed = args.includes('--closed');
   const state = showAll ? 'all' : (showClosed ? 'closed' : 'open');
 
+  terminal.showLoading();
   try {
     const issues = await fetchRepoIssues(parsed.owner, parsed.repo, state);
+    terminal.hideLoading();
     
     if (issues.length === 0) {
       const stateDesc = showAll ? '' : (showClosed ? 'closed ' : 'open ');
@@ -820,6 +850,7 @@ async function cmdIssues(terminal, githubUser, args) {
     });
     terminal.print(`\n<span class="info">${issues.length} issue(s)</span>`);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
@@ -840,8 +871,10 @@ async function cmdContributors(terminal, githubUser, args) {
     return;
   }
 
+  terminal.showLoading();
   try {
     const contributors = await fetchRepoContributors(parsed.owner, parsed.repo, count);
+    terminal.hideLoading();
     
     if (contributors.length === 0) {
       terminal.print(`<span class="info">No contributors found</span>`);
@@ -854,6 +887,7 @@ async function cmdContributors(terminal, githubUser, args) {
     });
     terminal.print(`\n<span class="info">${contributors.length} contributor(s)</span>`);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
@@ -874,8 +908,10 @@ async function cmdReleases(terminal, githubUser, args) {
     return;
   }
 
+  terminal.showLoading();
   try {
     const releases = await fetchRepoReleases(parsed.owner, parsed.repo, count);
+    terminal.hideLoading();
     
     if (releases.length === 0) {
       terminal.print(`<span class="info">No releases found</span>`);
@@ -892,6 +928,7 @@ async function cmdReleases(terminal, githubUser, args) {
     });
     terminal.print(`\n<span class="info">${releases.length} release(s)</span>`);
   } catch (error) {
+    terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }

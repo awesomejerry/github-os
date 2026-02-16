@@ -177,6 +177,40 @@ export class Terminal {
   }
 
   /**
+   * Show loading indicator
+   */
+  showLoading(message = 'Loading...') {
+    // Remove any existing loading indicator
+    this.hideLoading();
+    
+    // Create and append loading indicator
+    const loadingEl = document.createElement('div');
+    loadingEl.id = 'loading-indicator';
+    loadingEl.className = 'loading';
+    loadingEl.innerHTML = `<span class="info">${message}</span>`;
+    this.output.appendChild(loadingEl);
+    this.scrollToBottom();
+    
+    // Store reference for removal
+    this.loadingElement = loadingEl;
+  }
+
+  /**
+   * Hide loading indicator
+   */
+  hideLoading() {
+    if (this.loadingElement) {
+      this.loadingElement.remove();
+      this.loadingElement = null;
+    }
+    // Also try to remove by ID in case reference was lost
+    const existing = document.getElementById('loading-indicator');
+    if (existing) {
+      existing.remove();
+    }
+  }
+
+  /**
    * Update prompt based on current path
    */
   updatePrompt() {
