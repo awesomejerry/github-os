@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate } from './utils.js';
 import { LANGUAGE_MAP } from './config.js';
 
@@ -27,7 +27,8 @@ export const commands = {
   // Phase 3 commands
   grep: cmdGrep,
   log: cmdLog,
-  branch: cmdBranch
+  branch: cmdBranch,
+  find: cmdFind
 };
 
 /**
@@ -91,7 +92,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -164,6 +165,7 @@ function cmdHelp(terminal) {
    <span class="info">info</span>              Show repository details
    <span class="info">log</span> [count]       Show commit history (default: 10)
    <span class="info">branch</span>            List all branches (default marked with *)
+   <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
    <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
    <span class="info">whoami</span>            Show current GitHub user
 
@@ -711,6 +713,55 @@ async function cmdBranch(terminal, githubUser, args) {
       terminal.print(`${prefix}<span class="${className}">${branch.name}</span>`);
     });
     terminal.print(`\n<span class="info">${branches.length} branch(es)</span>`);
+  } catch (error) {
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdFind(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: find &lt;pattern&gt;</span>`);
+    terminal.print(`<span class="info">Examples:</span>`);
+    terminal.print(`  find *.js        Find all JavaScript files`);
+    terminal.print(`  find test        Find files containing "test"`);
+    terminal.print(`  find README      Find all README files`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const pattern = args[0];
+
+  try {
+    const repoInfo = await getRepoInfo(parsed.owner, parsed.repo);
+    terminal.print(`<span class="info">Searching for "${pattern}"...</span>`);
+    
+    const files = await fetchRepoTree(parsed.owner, parsed.repo, repoInfo.default_branch);
+    
+    const regexPattern = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*')
+      .replace(/\?/g, '.');
+    
+    const regex = new RegExp(regexPattern, 'i');
+    const matches = files.filter(file => regex.test(file.path));
+    
+    if (matches.length === 0) {
+      terminal.print(`<span class="info">No files found matching "${pattern}"</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    matches.forEach(file => {
+      terminal.print(`  <span class="file">${file.path}</span>`);
+    });
+    terminal.print(`\n<span class="info">${matches.length} file(s) found</span>`);
   } catch (error) {
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }

@@ -290,3 +290,38 @@ export async function fetchRepoBranches(owner, repo) {
     throw new Error(`Failed to fetch branches: ${error.message}`);
   }
 }
+
+export async function fetchRepoTree(owner, repo, branch = 'main') {
+  const cacheKey = `tree:${owner}/${repo}:${branch}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`
+    );
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Repository or branch not found');
+      }
+      throw new Error('Failed to fetch repository tree');
+    }
+    
+    const data = await response.json();
+    
+    const files = data.tree
+      .filter(item => item.type === 'blob')
+      .map(item => ({
+        path: item.path,
+        type: 'file'
+      }));
+    
+    cache.set(cacheKey, files);
+    return files;
+  } catch (error) {
+    throw new Error(`Failed to fetch tree: ${error.message}`);
+  }
+}
