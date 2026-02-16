@@ -12,7 +12,12 @@
     "type": "git",
     "url": "git+https://github.com/awesomejerry/github-os.git"
   },
-  "keywords": ["github", "terminal", "filesystem", "cli"],
+  "keywords": [
+    "github",
+    "terminal",
+    "filesystem",
+    "cli"
+  ],
   "author": "awesomejerry",
   "license": "MIT",
   "bugs": {
@@ -20,6 +25,7 @@
   },
   "homepage": "https://github.com/awesomejerry/github-os#readme",
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.18",
     "jsdom": "^28.1.0",
     "vitest": "^4.0.18"
   }
