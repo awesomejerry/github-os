@@ -368,4 +368,82 @@ describe('GitHub API Functions', () => {
       expect(contributors).toEqual([]);
     });
   });
+
+  describe('fetchRepoReleases', () => {
+    it('should fetch and format releases', async () => {
+      const mockReleases = [
+        {
+          tag_name: 'v1.0.0',
+          name: 'First Release',
+          author: { login: 'alice' },
+          published_at: '2026-02-16T10:00:00Z',
+          prerelease: false,
+          html_url: 'https://github.com/user/repo/releases/tag/v1.0.0'
+        },
+        {
+          tag_name: 'v0.9.0-beta',
+          name: 'Beta Release',
+          author: { login: 'bob' },
+          published_at: '2026-02-15T10:00:00Z',
+          prerelease: true,
+          html_url: 'https://github.com/user/repo/releases/tag/v0.9.0-beta'
+        }
+      ];
+      setMockResponse('/releases', mockReleases);
+
+      const { fetchRepoReleases, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const releases = await fetchRepoReleases('user', 'repo', 10);
+      
+      expect(releases).toHaveLength(2);
+      expect(releases[0].tag_name).toBe('v1.0.0');
+      expect(releases[0].name).toBe('First Release');
+      expect(releases[0].author).toBe('alice');
+      expect(releases[0].prerelease).toBe(false);
+      expect(releases[1].prerelease).toBe(true);
+    });
+
+    it('should use tag_name as name when name is missing', async () => {
+      const mockReleases = [
+        {
+          tag_name: 'v1.0.0',
+          name: null,
+          author: { login: 'alice' },
+          published_at: '2026-02-16T10:00:00Z',
+          prerelease: false,
+          html_url: 'https://github.com/user/repo/releases/tag/v1.0.0'
+        }
+      ];
+      setMockResponse('/releases', mockReleases);
+
+      const { fetchRepoReleases, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const releases = await fetchRepoReleases('user', 'repo', 10);
+      expect(releases[0].name).toBe('v1.0.0');
+    });
+
+    it('should cache releases results', async () => {
+      setMockResponse('/releases', []);
+      
+      const { fetchRepoReleases, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      await fetchRepoReleases('user', 'repo', 10);
+      await fetchRepoReleases('user', 'repo', 10);
+      
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return empty array for no releases', async () => {
+      setMockResponse('/releases', []);
+
+      const { fetchRepoReleases, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+      
+      const releases = await fetchRepoReleases('user', 'repo', 10);
+      expect(releases).toEqual([]);
+    });
+  });
 });
