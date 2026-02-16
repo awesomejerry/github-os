@@ -1,0 +1,26 @@
+{
+  "name": "github-os",
+  "version": "1.4.0",
+  "description": "A web-based terminal interface that mimics a VM file system, browsing GitHub repositories as directories and files.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/awesomejerry/github-os.git"
+  },
+  "keywords": ["github", "terminal", "filesystem", "cli"],
+  "author": "awesomejerry",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/awesomejerry/github-os/issues"
+  },
+  "homepage": "https://github.com/awesomejerry/github-os#readme",
+  "devDependencies": {
+    "jsdom": "^28.1.0",
+    "vitest": "^4.0.18"
+  }
+}
