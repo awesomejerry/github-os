@@ -119,11 +119,15 @@ export class Terminal {
    * Print text to terminal
    */
   print(text, className = '') {
+    // Check scroll position BEFORE adding content
+    const wasAtBottom = this.isScrolledToBottom();
     const line = document.createElement('div');
     line.className = 'line ' + className;
     line.innerHTML = text;
     this.output.appendChild(line);
-    this.scrollToBottom();
+    if (wasAtBottom) {
+      this.terminal.scrollTop = this.terminal.scrollHeight;
+    }
   }
 
   /**
@@ -137,6 +141,8 @@ export class Terminal {
    * Print code block with syntax highlighting
    */
   printCode(code, language) {
+    // Check scroll position BEFORE adding content
+    const wasAtBottom = this.isScrolledToBottom();
     const pre = document.createElement('pre');
     const codeEl = document.createElement('code');
     codeEl.className = `language-${language}`;
@@ -150,18 +156,24 @@ export class Terminal {
       hljs.highlightElement(codeEl);
     }
     
-    this.scrollToBottom();
+    if (wasAtBottom) {
+      this.terminal.scrollTop = this.terminal.scrollHeight;
+    }
   }
 
   /**
-   * Scroll to bottom of terminal
+   * Check if user is scrolled to bottom
+   */
+  isScrolledToBottom() {
+    // +1 for a small buffer
+    return this.terminal.scrollHeight - this.terminal.clientHeight <= this.terminal.scrollTop + 1;
+  }
+
+  /**
+   * Scroll to bottom of terminal (always)
    */
   scrollToBottom() {
-    // Only auto-scroll if the user is at or near the bottom
-    const isScrolledToBottom = this.terminal.scrollHeight - this.terminal.clientHeight <= this.terminal.scrollTop + 1; // +1 for a small buffer
-    if (isScrolledToBottom) {
-      this.terminal.scrollTop = this.terminal.scrollHeight;
-    }
+    this.terminal.scrollTop = this.terminal.scrollHeight;
   }
 
   /**
