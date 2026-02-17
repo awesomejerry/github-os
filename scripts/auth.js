@@ -5,7 +5,7 @@ import { saveSession } from './session.js';
 
 const OAUTH_CONFIG = {
   clientId: 'Ov23liAdo8bSKYgsNNQ9',
-  redirectUri: 'https://www.awesomejerry.space/callback.html',
+  redirectUri: 'https://www.awesomejerry.space/github-os/callback.html',
   scope: 'repo user',
   authUrl: 'https://github.com/login/oauth/authorize',
   tokenUrl: 'https://github.com/login/oauth/access_token'
