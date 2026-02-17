@@ -97,8 +97,24 @@ Type <span class="info">'login'</span> to authenticate with GitHub.
   async loadRepos() {
     try {
       this.terminal.print(`<span class="info">Loading repositories...</span>`);
+      
+      // Clear repo cache to ensure fresh data (important for auth status changes)
+      const { clearCache } = await import('./github.js');
+      clearCache();
+      
       const repos = await import('./github.js').then(m => m.fetchUserRepos(this.githubUser));
-      this.terminal.print(`<span class="success">Loaded ${repos.length} repositories</span>\n`);
+      
+      // Count private repos if authenticated
+      const { isAuthenticated } = await import('./session.js');
+      let statusMsg = `Loaded ${repos.length} repositories`;
+      if (isAuthenticated()) {
+        const privateCount = repos.filter(r => r.private).length;
+        if (privateCount > 0) {
+          statusMsg += ` (${privateCount} private)`;
+        }
+      }
+      
+      this.terminal.print(`<span class="success">${statusMsg}</span>\n`);
     } catch (error) {
       this.terminal.print(`<span class="error">Error: ${error.message}</span>\n`);
     }
