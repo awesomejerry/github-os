@@ -5,6 +5,8 @@ import { commands, getCompletions } from './commands.js';
 import { detectGitHubUser } from './utils.js';
 import { DEFAULT_GITHUB_USER } from './config.js';
 import { clearUserCache } from './github.js';
+import { loadSession, isAuthenticated } from './session.js';
+import { validateToken } from './auth.js';
 
 class GitHubOS {
   constructor() {
@@ -22,6 +24,12 @@ class GitHubOS {
    * Initialize the application
    */
   async init() {
+    // Check for auth callback success
+    this.checkAuthCallback();
+    
+    // Validate existing session
+    await this.validateSession();
+    
     this.printWelcome();
     this.terminal.updatePrompt();
     
@@ -33,14 +41,51 @@ class GitHubOS {
   }
 
   /**
+   * Check for auth callback success message
+   */
+  checkAuthCallback() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('auth') === 'success') {
+      // Remove the query param
+      window.history.replaceState({}, '', 'index.html');
+    }
+  }
+
+  /**
+   * Validate existing session token
+   */
+  async validateSession() {
+    const session = loadSession();
+    if (session && session.accessToken) {
+      try {
+        const isValid = await validateToken(session.accessToken);
+        if (!isValid) {
+          // Token is invalid, clear session silently
+          const { clearSession } = await import('./session.js');
+          clearSession();
+        }
+      } catch {
+        // Validation failed, continue without clearing
+        // User can manually logout if needed
+      }
+    }
+  }
+
+  /**
    * Print welcome message
    */
   printWelcome() {
+    const session = loadSession();
+    const loggedIn = session && session.username;
+    const userDisplay = loggedIn ? session.username : this.githubUser;
+    const statusText = loggedIn ? '(logged in)' : '(anonymous)';
+    
     const welcomeText = `
-<span class="welcome">Welcome to GitHub OS v1.8.0</span>
-Connecting to GitHub user: <span class="success">${this.githubUser}</span>
+<span class="welcome">Welcome to GitHub OS v2.0.0</span>
+Connecting to GitHub user: <span class="success">${userDisplay}</span> <span class="info">${statusText}</span>
 
 Type <span class="info">'help'</span> for available commands.
+Type <span class="info">'login'</span> to authenticate with GitHub.
 
 `;
     this.terminal.print(welcomeText);
