@@ -95,6 +95,7 @@ describe('Session Management', () => {
 
   describe('loadAllSessions', () => {
     it('should return empty array when no sessions exist', () => {
+      localStorageMock.getItem.mockReturnValue(null);
       const sessions = loadAllSessions();
       expect(sessions).toEqual([]);
     });
@@ -167,6 +168,7 @@ describe('Session Management', () => {
 
   describe('isAuthenticated', () => {
     it('should return false when no session exists', () => {
+      localStorageMock.getItem.mockReturnValue(null);
       expect(isAuthenticated()).toBe(false);
     });
 
@@ -187,6 +189,7 @@ describe('Session Management', () => {
 
   describe('getAccessToken', () => {
     it('should return null when no session exists', () => {
+      localStorageMock.getItem.mockReturnValue(null);
       expect(getAccessToken()).toBeNull();
     });
 

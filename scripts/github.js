@@ -275,7 +275,11 @@ export async function searchCode(owner, repo, query, path = '') {
  */
 export function clearUserCache(username) {
   for (const key of cache.keys()) {
-    if (key.includes(`:${username}/`) || key === `repos:${username}`) {
+    // Match repos:${username}, repos:${username}:auth, repos:${username}:public
+    // Also match :${username}/ for content/info/commits etc
+    if (key.includes(`:${username}/`) || 
+        key === `repos:${username}` || 
+        key.startsWith(`repos:${username}:`)) {
       cache.delete(key);
     }
   }

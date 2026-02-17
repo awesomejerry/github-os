@@ -261,6 +261,7 @@ describe('OAuth Authentication', () => {
 
     it('should return error when PKCE state not found', async () => {
       window.location.search = '?code=test-code&state=test-state';
+      localStorageMock.getItem.mockReturnValue(null); // No PKCE state
 
       const { handleCallback } = await import('../../scripts/auth.js');
       const result = await handleCallback();
