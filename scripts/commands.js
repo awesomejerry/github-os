@@ -234,9 +234,10 @@ async function cmdLs(terminal, githubUser, args) {
       terminal.hideLoading();
       terminal.print('');
       repos.forEach(repo => {
+        const lock = repo.private ? '🔒 ' : '';
         const lang = repo.language ? ` [<span class="info">${repo.language}</span>]` : '';
         const stars = repo.stars > 0 ? ` <span class="success">★${repo.stars}</span>` : '';
-        terminal.print(`<span class="directory">${repo.name}/</span>${lang}${stars}`);
+        terminal.print(`${lock}<span class="directory">${repo.name}/</span>${lang}${stars}`);
         if (repo.description) {
           terminal.print(`  <span class="info">${repo.description}</span>`);
         }

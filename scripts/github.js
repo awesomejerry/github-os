@@ -52,25 +52,35 @@ function checkRateLimit(response) {
 }
 
 /**
- * Fetch user's public repositories
+ * Fetch user's repositories
+ * If authenticated, includes private repos
  */
 export async function fetchUserRepos(username) {
-  const cacheKey = `repos:${username}`;
+  const cacheKey = `repos:${username}:${isAuthenticated() ? 'auth' : 'public'}`;
   
   if (cache.has(cacheKey)) {
     return cache.get(cacheKey);
   }
 
   try {
-    const response = await fetch(
-      `${GITHUB_API.BASE_URL}/users/${username}/repos?per_page=${GITHUB_API.REPOS_PER_PAGE}&sort=updated`,
-      { headers: getHeaders() }
-    );
+    let url;
+    let repos;
     
-    checkRateLimit(response);
-    if (!response.ok) throw new Error('User not found');
-    
-    const repos = await response.json();
+    if (isAuthenticated()) {
+      // Use /user/repos to get all repos (including private)
+      url = `${GITHUB_API.BASE_URL}/user/repos?per_page=${GITHUB_API.REPOS_PER_PAGE}&sort=updated&affiliation=owner`;
+      const response = await fetch(url, { headers: getHeaders() });
+      checkRateLimit(response);
+      if (!response.ok) throw new Error('Failed to fetch repositories');
+      repos = await response.json();
+    } else {
+      // Use /users/{username}/repos for public only
+      url = `${GITHUB_API.BASE_URL}/users/${username}/repos?per_page=${GITHUB_API.REPOS_PER_PAGE}&sort=updated`;
+      const response = await fetch(url, { headers: getHeaders() });
+      checkRateLimit(response);
+      if (!response.ok) throw new Error('User not found');
+      repos = await response.json();
+    }
     
     const formattedRepos = repos.map(repo => ({
       name: repo.name,
@@ -78,7 +88,8 @@ export async function fetchUserRepos(username) {
       description: repo.description,
       stars: repo.stargazers_count,
       forks: repo.forks_count,
-      language: repo.language
+      language: repo.language,
+      private: repo.private
     }));
     
     cache.set(cacheKey, formattedRepos);
