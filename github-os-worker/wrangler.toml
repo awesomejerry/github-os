@@ -1,0 +1,9 @@
+name = "github-os-token"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Deploy instructions:
+# 1. cd github-os-worker
+# 2. wrangler login (or set CLOUDFLARE_API_TOKEN)
+# 3. wrangler secret put GITHUB_CLIENT_SECRET
+# 4. wrangler deploy
