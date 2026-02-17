@@ -9,8 +9,7 @@ const OAUTH_CONFIG = {
   scope: 'repo user',
   authUrl: 'https://github.com/login/oauth/authorize',
   // Token exchange via Cloudflare Worker (to avoid CORS)
-  // Deploy the worker from github-os-worker/ and update this URL
-  tokenProxyUrl: 'https://github-os-token.angeljerry.workers.dev'
+  tokenProxyUrl: 'https://github-os-token.awesomejerryshen.workers.dev'
 };
 
 const PKCE_STATE_KEY = 'github_os_pkce_state';
