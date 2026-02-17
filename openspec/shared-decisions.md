@@ -10,10 +10,10 @@
 ```javascript
 const OAUTH_CONFIG = {
   clientId: 'Ov23liAdo8bSKYgsNNQ9',
-  redirectUri: 'https://awesomejerry.github.io/github-os/callback.html',
+  redirectUri: 'https://www.awesomejerry.space/github-os/callback.html',
   scope: 'repo user',
   authUrl: 'https://github.com/login/oauth/authorize',
-  tokenUrl: 'https://github.com/login/oauth/access_token'
+  tokenProxyUrl: 'https://github-os-token.awesomejerryshen.workers.dev'
 };
 ```
 
