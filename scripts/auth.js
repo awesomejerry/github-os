@@ -8,7 +8,9 @@ const OAUTH_CONFIG = {
   redirectUri: 'https://www.awesomejerry.space/github-os/callback.html',
   scope: 'repo user',
   authUrl: 'https://github.com/login/oauth/authorize',
-  tokenUrl: 'https://github.com/login/oauth/access_token'
+  // Token exchange via Cloudflare Worker (to avoid CORS)
+  // Deploy the worker from github-os-worker/ and update this URL
+  tokenProxyUrl: 'https://github-os-token.angeljerry.workers.dev'
 };
 
 const PKCE_STATE_KEY = 'github_os_pkce_state';
@@ -228,25 +230,23 @@ export async function handleCallback() {
 
 /**
  * Exchange authorization code for access token
+ * Uses Cloudflare Worker proxy to avoid CORS issues
  * @param {string} code - Authorization code from GitHub
  * @param {string} codeVerifier - PKCE code_verifier
  * @returns {Promise<{access_token: string, token_type: string, scope: string}>}
  */
 export async function exchangeCodeForToken(code, codeVerifier) {
-  const params = new URLSearchParams({
-    client_id: OAUTH_CONFIG.clientId,
-    code: code,
-    code_verifier: codeVerifier,
-    redirect_uri: OAUTH_CONFIG.redirectUri
-  });
-  
-  const response = await fetch(OAUTH_CONFIG.tokenUrl, {
+  const response = await fetch(OAUTH_CONFIG.tokenProxyUrl, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded'
+      'Content-Type': 'application/json'
     },
-    body: params.toString()
+    body: JSON.stringify({
+      code: code,
+      code_verifier: codeVerifier,
+      redirect_uri: OAUTH_CONFIG.redirectUri
+    })
   });
   
   if (!response.ok) {
