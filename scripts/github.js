@@ -1,9 +1,28 @@
 // GitHub OS - GitHub API Functions
 
 import { GITHUB_API } from './config.js';
+import { getAccessToken, isAuthenticated } from './session.js';
 
 // Cache for loaded data
 const cache = new Map();
+
+/**
+ * Get headers for GitHub API requests (with auth if available)
+ */
+function getHeaders() {
+  const headers = {
+    'Accept': 'application/vnd.github.v3+json'
+  };
+  
+  if (isAuthenticated()) {
+    const token = getAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  
+  return headers;
+}
 
 /**
  * Get cache (for tab completion)
@@ -44,7 +63,8 @@ export async function fetchUserRepos(username) {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/users/${username}/repos?per_page=${GITHUB_API.REPOS_PER_PAGE}&sort=updated`
+      `${GITHUB_API.BASE_URL}/users/${username}/repos?per_page=${GITHUB_API.REPOS_PER_PAGE}&sort=updated`,
+      { headers: getHeaders() }
     );
     
     checkRateLimit(response);
@@ -80,7 +100,8 @@ export async function fetchRepoContents(owner, repo, path = '') {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`,
+      { headers: getHeaders() }
     );
     
     if (!response.ok) throw new Error('Path not found');
@@ -115,7 +136,8 @@ export async function fetchFileContent(owner, repo, path) {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`,
+      { headers: getHeaders() }
     );
     
     if (!response.ok) throw new Error('File not found');
@@ -166,7 +188,8 @@ export async function getRepoInfo(owner, repo) {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}`,
+      { headers: getHeaders() }
     );
     
     if (!response.ok) throw new Error('Repository not found');
@@ -210,7 +233,8 @@ export async function searchCode(owner, repo, query, path = '') {
     }
     
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/search/code?q=${encodeURIComponent(searchQuery)}&per_page=30`
+      `${GITHUB_API.BASE_URL}/search/code?q=${encodeURIComponent(searchQuery)}&per_page=30`,
+      { headers: getHeaders() }
     );
     
     if (!response.ok) {
@@ -255,7 +279,8 @@ export async function fetchRepoCommits(owner, repo, count = 10) {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/commits?per_page=${count}`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/commits?per_page=${count}`,
+      { headers: getHeaders() }
     );
     
     if (!response.ok) {
@@ -291,7 +316,8 @@ export async function fetchRepoBranches(owner, repo) {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/branches?per_page=100`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/branches?per_page=100`,
+      { headers: getHeaders() }
     );
     
     if (!response.ok) {
@@ -321,7 +347,8 @@ export async function fetchRepoTree(owner, repo, branch = 'main') {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+      { headers: getHeaders() }
     );
     
     if (!response.ok) {
@@ -356,7 +383,8 @@ export async function fetchRepoIssues(owner, repo, state = 'open') {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues?state=${state}&per_page=30`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues?state=${state}&per_page=30`,
+      { headers: getHeaders() }
     );
     
     checkRateLimit(response);
@@ -395,7 +423,8 @@ export async function fetchRepoReleases(owner, repo, count = 10) {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/releases?per_page=${count}`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/releases?per_page=${count}`,
+      { headers: getHeaders() }
     );
     
     checkRateLimit(response);
@@ -431,7 +460,8 @@ export async function fetchRepoContributors(owner, repo, count = 20) {
 
   try {
     const response = await fetch(
-      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contributors?per_page=${count}`
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contributors?per_page=${count}`,
+      { headers: getHeaders() }
     );
     
     checkRateLimit(response);

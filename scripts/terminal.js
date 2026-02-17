@@ -1,5 +1,7 @@
 // GitHub OS - Terminal UI
 
+import { loadSession } from './session.js';
+
 /**
  * Terminal class - handles all DOM interactions and display
  */
@@ -211,11 +213,13 @@ export class Terminal {
   }
 
   /**
-   * Update prompt based on current path
+   * Update prompt based on current path and auth status
    */
   updatePrompt() {
     const pathDisplay = this.currentPath === '/' ? '~' : `~${this.currentPath}`;
-    this.promptEl.textContent = `guest@github-os:${pathDisplay}$`;
+    const session = loadSession();
+    const user = session?.username || 'guest';
+    this.promptEl.textContent = `${user}@github-os:${pathDisplay}$`;
   }
 
   /**
