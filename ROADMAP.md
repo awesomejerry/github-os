@@ -1,0 +1,309 @@
+# GitHub OS Roadmap
+
+> **Current Version:** v1.8.0  
+> **Vision:** Make GitHub feel like a native filesystem you can navigate, explore, and interact with through a familiar terminal interface.
+
+---
+
+## 🎯 Design Philosophy
+
+- **Terminal-first** - Authentic CLI experience, not a web app disguised as terminal
+- **Zero-setup** - Works instantly, no backend, no auth required for basics
+- **Progressive enhancement** - Optional auth unlocks more features
+- **Keyboard-driven** - Power users should never need a mouse
+
+---
+
+## 📦 Phase 5: Authentication & Private Repos (v2.0)
+
+**Theme:** Unlock the full GitHub API
+
+### Features
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **OAuth Login** | GitHub OAuth flow for authentication | P0 |
+| **Private Repos** | Access your private repositories | P0 |
+| **Rate Limit Relief** | 5000 req/hour vs 60 req/hour | P0 |
+| **Session Persistence** | Stay logged in across visits | P1 |
+| **Multi-account** | Switch between GitHub accounts | P2 |
+
+### New Commands
+
+```bash
+login           # Start OAuth flow
+logout          # End session
+status          # Show auth status & rate limits
+```
+
+### Technical Notes
+
+- Use GitHub OAuth App or GitHub App
+- Store token in localStorage (encrypted optional)
+- Handle token refresh/expiration gracefully
+
+---
+
+## 📝 Phase 6: Write Operations (v2.1)
+
+**Theme:** From read-only to read-write
+
+### Features
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Create Files** | `touch` command to create new files | P0 |
+| **Edit Files** | Built-in editor or `edit` command | P0 |
+| **Delete Files** | `rm` command with confirmation | P0 |
+| **Create Directories** | `mkdir` command | P1 |
+| **Commit Changes** | `commit` command with message | P0 |
+| **Branch Operations** | Create/switch/delete branches | P1 |
+
+### New Commands
+
+```bash
+touch <file>              # Create new file
+edit <file>               # Open file in editor
+rm <file>                 # Delete file (with confirmation)
+mkdir <dir>               # Create directory
+mv <src> <dest>           # Move/rename files
+cp <src> <dest>           # Copy files
+commit -m "message"       # Commit staged changes
+branch -c <name>          # Create new branch
+checkout <branch>         # Switch branch
+```
+
+### Technical Notes
+
+- Requires auth (Phase 5)
+- Use GitHub's Contents API for file operations
+- Consider mini text editor (Monaco? CodeMirror? Or simple textarea)
+- Git-like staging area concept (optional)
+
+---
+
+## 🔀 Phase 7: Pull Requests (v2.2)
+
+**Theme:** Full PR workflow in terminal
+
+### Features
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **List PRs** | `pr` command to list pull requests | P0 |
+| **View PR Details** | See diff, description, comments | P0 |
+| **Create PR** | Turn current branch into PR | P1 |
+| **Review PR** | Approve/request changes/comment | P2 |
+| **Merge PR** | Merge via terminal | P1 |
+
+### New Commands
+
+```bash
+pr [--open|--closed|--all]    # List PRs
+pr view <number>              # View PR details
+pr create --title "..."       # Create PR from current branch
+pr diff <number>              # View PR diff
+pr merge <number>             # Merge PR
+pr close <number>             # Close PR
+review <pr> --approve         # Approve PR
+review <pr> --comment "..."   # Comment on PR
+```
+
+### UX Ideas
+
+- `pr view` shows split-screen: description left, diff right
+- Color-coded diff view (additions green, deletions red)
+- Thread view for PR comments
+
+---
+
+## 🎨 Phase 8: UX & Polish (v2.3)
+
+**Theme:** Professional terminal experience
+
+### Features
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Themes** | Multiple color schemes (light/dark/custom) | P0 |
+| **Keyboard Shortcuts** | Vim/Emacs modes, custom bindings | P0 |
+| **Command Aliases** | Define shortcuts for commands | P1 |
+| **Improved Tab Completion** | Smarter autocomplete | P1 |
+| **Command History Search** | Ctrl+R for history search | P0 |
+| **Split Panes** | Multiple terminal panes | P2 |
+| **Sessions** | Save/restore terminal sessions | P2 |
+
+### New Commands
+
+```bash
+theme <name>            # Switch theme (dark, light, dracula, etc.)
+alias ll="ls -la"       # Create command alias
+bind <key> <action>     # Bind keyboard shortcut
+sessions                # List saved sessions
+session save <name>     # Save current session
+session load <name>     # Restore session
+```
+
+### Technical Notes
+
+- Store preferences in localStorage
+- Consider xterm.js for better terminal emulation
+- Themes as CSS variables for easy switching
+
+---
+
+## 🏢 Phase 9: Organizations & Teams (v2.4)
+
+**Theme:** Navigate beyond personal repos
+
+### Features
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Org Navigation** | Browse organization repos | P0 |
+| **Team Repos** | See repos by team membership | P1 |
+| **Org Switcher** | Quick switch between orgs | P0 |
+
+### New Commands
+
+```bash
+org                     # List your organizations
+org <name>              # Navigate to org
+teams                   # List teams in current org
+team <name>             # Browse team repos
+```
+
+### Path Structure Update
+
+```
+/                           # Root
+├── ~                       # Your repos (current)
+├── @org1                   # Organization repos
+│   ├── repo1/
+│   └── repo2/
+└── @org2/
+    └── repo3/
+```
+
+---
+
+## 🔔 Phase 10: Notifications & Actions (v2.5)
+
+**Theme:** Stay informed
+
+### Features
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Notifications** | View GitHub notifications | P0 |
+| **Actions** | View workflow runs | P0 |
+| **Workflow Logs** | See CI/CD logs | P1 |
+| **Badge Display** | Show CI status in `ls` | P2 |
+
+### New Commands
+
+```bash
+notifications [--all]        # Show notifications
+actions                      # List workflow runs
+actions view <run-id>        # View run details & logs
+actions rerun <run-id>       # Rerun workflow
+```
+
+### UX Ideas
+
+- Notification count in prompt: `jerry@github-os:~ (3)`
+- CI status badges next to repos in `ls`
+- Real-time updates via polling (or WebSocket if available)
+
+---
+
+## 🚀 Phase 11: Power User Features (v3.0)
+
+**Theme:** Advanced workflows
+
+### Features
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Shell Scripts** | Save & run command sequences | P0 |
+| **File Watch** | Auto-refresh on file changes | P1 |
+| **Gists** | Create/view gists | P1 |
+| **Wiki** | Browse repo wikis | P2 |
+| **Projects** | View GitHub Projects | P2 |
+| **Discussions** | Browse discussions | P2 |
+| **Webhooks** | View repo webhooks | P3 |
+| **Deploy Keys** | Manage deploy keys | P3 |
+
+### New Commands
+
+```bash
+script save <name>       # Save command history as script
+script run <name>        # Execute saved script
+gist create <file>       # Create gist from file
+gist list                # List your gists
+wiki                     # Browse repo wiki
+projects                 # View GitHub Projects
+discussions              # Browse discussions
+```
+
+---
+
+## 🛠️ Technical Debt & Improvements
+
+### Ongoing
+
+- [ ] **Performance** - Optimize API calls, smarter caching
+- [ ] **Accessibility** - Screen reader support, ARIA labels
+- [ ] **Mobile UX** - Better touch keyboard, responsive layout
+- [ ] **Offline Mode** - Cache visited repos for offline access
+- [ ] **Error Recovery** - Better error messages, retry logic
+- [ ] **Testing** - Increase test coverage to 80%+
+- [ ] **Documentation** - Inline help, command examples
+
+### Architecture Considerations
+
+- **State Management** - Consider Zustand or similar for complex state
+- **Terminal Library** - Evaluate xterm.js for better emulation
+- **Build Step** - Consider Vite for bundling (optional, keep zero-build option)
+- **Service Worker** - Enable offline + caching
+
+---
+
+## 📊 Version Summary
+
+| Version | Theme | Key Features |
+|---------|-------|--------------|
+| v1.0-1.8 | Foundation | Core commands, read-only, tests |
+| **v2.0** | Auth | OAuth, private repos, rate limits |
+| **v2.1** | Write | Edit, commit, branch operations |
+| **v2.2** | PRs | Full PR workflow |
+| **v2.3** | Polish | Themes, shortcuts, UX |
+| **v2.4** | Orgs | Organizations & teams |
+| **v2.5** | Activity | Notifications, Actions |
+| **v3.0** | Power | Scripts, gists, advanced features |
+
+---
+
+## 🤔 Open Questions
+
+1. **Editor Choice** - Monaco (VS Code), CodeMirror, or simple textarea?
+2. **Build Step** - Keep pure vanilla or add bundler for features?
+3. **Mobile Strategy** - Full support or companion app?
+4. **Enterprise** - Support GitHub Enterprise Server?
+5. **PWA** - Make installable as desktop/mobile app?
+
+---
+
+## 💡 Crazy Ideas (Future)
+
+- **Collaborative Terminal** - Share session with others (like tmux share)
+- **AI Assistant** - "Ask GitHub Copilot" integration
+- **Plugin System** - Let users write custom commands
+- **Sound Effects** - Optional terminal sounds (key clicks, errors)
+- **ASCII Art** - Generate ASCII art from repo structure
+- **Gamification** - Achievements for exploring GitHub
+
+---
+
+*Last updated: 2026-02-17*
+*Created by: openclaw*
