@@ -2,7 +2,30 @@
 
 import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
-import { LANGUAGE_MAP } from './config.js';
+import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
+
+let auth, session;
+
+try {
+  auth = await import('./auth.js');
+} catch {
+  auth = {
+    initiateLogin: () => {
+      throw new Error('Auth module not available. Please wait for auth-oauth implementation.');
+    }
+  };
+}
+
+try {
+  session = await import('./session.js');
+} catch {
+  session = {
+    loadSession: () => null,
+    clearSession: () => {},
+    isAuthenticated: () => false,
+    getAccessToken: () => null
+  };
+}
 
 /**
  * Command registry - maps command names to functions
@@ -32,7 +55,11 @@ export const commands = {
   // Phase 4 commands
   issues: cmdIssues,
   contributors: cmdContributors,
-  releases: cmdReleases
+  releases: cmdReleases,
+  // Auth commands
+  login: cmdLogin,
+  logout: cmdLogout,
+  status: cmdStatus
 };
 
 /**
@@ -96,7 +123,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -175,6 +202,11 @@ function cmdHelp(terminal) {
     <span class="info">contributors</span> [count]     List repository contributors (default: 20)
     <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
     <span class="info">whoami</span>            Show current GitHub user
+
+ <span class="info">Authentication</span>
+    <span class="info">login</span>             Connect to GitHub with OAuth
+    <span class="info">logout</span>            Disconnect from GitHub
+    <span class="info">status</span>            Show authentication status and rate limits
 
  <span class="info">Other</span>
   <span class="info">clear</span>             Clear terminal screen
@@ -486,7 +518,13 @@ async function cmdInfo(terminal, githubUser, args) {
 }
 
 function cmdWhoami(terminal, githubUser) {
-  terminal.print(`<span class="info">GitHub user:</span> <span class="success">${githubUser}</span>`);
+  const currentSession = session.loadSession();
+  
+  if (currentSession && currentSession.username) {
+    terminal.print(`<span class="info">GitHub user:</span> <span class="success">${currentSession.username}</span> <span class="info">(logged in)</span>`);
+  } else {
+    terminal.print(`<span class="info">GitHub user:</span> <span class="success">${githubUser}</span> <span class="info">(default, not logged in)</span>`);
+  }
 }
 
 async function cmdConnect(terminal, githubUser, args, app) {
@@ -930,5 +968,72 @@ async function cmdReleases(terminal, githubUser, args) {
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdLogin(terminal) {
+  terminal.print(`<span class="info">Opening GitHub login...</span>`);
+  
+  try {
+    await auth.initiateLogin();
+  } catch (error) {
+    terminal.print(`<span class="error">Login failed: ${escapeHtml(error.message)}</span>`);
+  }
+}
+
+function cmdLogout(terminal) {
+  const currentSession = session.loadSession();
+  
+  if (currentSession && currentSession.username) {
+    const username = currentSession.username;
+    session.clearSession();
+    terminal.print(`<span class="success">Logged out from ${username}</span>`);
+  } else {
+    terminal.print(`<span class="info">No active session</span>`);
+  }
+}
+
+async function cmdStatus(terminal) {
+  const currentSession = session.loadSession();
+  
+  if (!currentSession || !currentSession.username) {
+    terminal.print(`<span class="info">Not logged in. Use 'login' to connect.</span>`);
+    return;
+  }
+  
+  terminal.print(`<span class="info">Logged in as:</span> <span class="success">${currentSession.username}</span>`);
+  terminal.print(`<span class="info">Token scope:</span> ${currentSession.scope || 'N/A'}`);
+  
+  try {
+    const token = session.getAccessToken();
+    if (token) {
+      const response = await fetch('https://api.github.com/user', {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const limit = response.headers.get('x-ratelimit-limit');
+      const remaining = response.headers.get('x-ratelimit-remaining');
+      const reset = response.headers.get('x-ratelimit-reset');
+      
+      if (limit && remaining && reset) {
+        const resetDate = new Date(parseInt(reset) * 1000);
+        const now = new Date();
+        const diffMs = resetDate - now;
+        const diffMins = Math.round(diffMs / 60000);
+        
+        const resetText = diffMins > 60 
+          ? `${Math.round(diffMins / 60)} hours` 
+          : `${diffMins} min`;
+        
+        terminal.print(`<span class="info">Rate limit:</span> ${remaining}/${limit} <span class="info">(resets in ${resetText})</span>`);
+      } else {
+        terminal.print(`<span class="info">Rate limit:</span> N/A`);
+      }
+    }
+  } catch (error) {
+    terminal.print(`<span class="info">Rate limit:</span> Unable to fetch`);
   }
 }
