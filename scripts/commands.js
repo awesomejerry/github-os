@@ -794,43 +794,6 @@ async function cmdLog(terminal, githubUser, args) {
   }
 }
 
-async function cmdBranch(terminal, githubUser, args) {
-  const currentPath = terminal.getPath();
-  
-  if (currentPath === '/') {
-    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
-    return;
-  }
-
-  const parsed = parsePath(githubUser, currentPath);
-
-  terminal.showLoading();
-  try {
-    const [branches, repoInfo] = await Promise.all([
-      fetchRepoBranches(parsed.owner, parsed.repo),
-      getRepoInfo(parsed.owner, parsed.repo)
-    ]);
-    terminal.hideLoading();
-    
-    if (branches.length === 0) {
-      terminal.print(`<span class="info">No branches found</span>`);
-      return;
-    }
-    
-    terminal.print('');
-    branches.forEach(branch => {
-      const isDefault = branch.name === repoInfo.default_branch;
-      const prefix = isDefault ? '* ' : '  ';
-      const className = isDefault ? 'success' : 'directory';
-      terminal.print(`${prefix}<span class="${className}">${branch.name}</span>`);
-    });
-    terminal.print(`\n<span class="info">${branches.length} branch(es)</span>`);
-  } catch (error) {
-    terminal.hideLoading();
-    terminal.print(`<span class="error">Error: ${error.message}</span>`);
-  }
-}
-
 async function cmdFind(terminal, githubUser, args) {
   if (args.length === 0) {
     terminal.print(`<span class="error">Usage: find &lt;pattern&gt;</span>`);
