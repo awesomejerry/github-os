@@ -3,6 +3,7 @@
 import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
+import { openEditor } from './editor.js';
 
 let auth, session;
 
@@ -65,7 +66,8 @@ export const commands = {
   mkdir: cmdMkdir,
   rm: cmdRm,
   mv: cmdMv,
-  cp: cmdCp
+  cp: cmdCp,
+  edit: cmdEdit
 };
 
 /**
@@ -129,7 +131,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -196,6 +198,7 @@ function cmdHelp(terminal) {
   <span class="info">readme</span>            Display README.md in current directory
   <span class="info">grep</span> &lt;pattern&gt; [file]   Search for pattern (file or repo-wide)
   <span class="info">download</span> &lt;file&gt;  Download file to your computer
+  <span class="info">edit</span> &lt;file&gt;       Edit file and save to GitHub
 
  <span class="info">File Operations (Write - requires login)</span>
   <span class="info">touch</span> &lt;file&gt;      Create new file
@@ -1338,6 +1341,83 @@ async function cmdCp(terminal, githubUser, args) {
     terminal.hideLoading();
     terminal.print(`<span class="success">Copied:</span> ${args[0]} → ${args[1]}`);
     terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+  }
+}
+
+async function cmdEdit(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Login required. Use 'login' to connect.</span>`);
+    return;
+  }
+  
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: edit &lt;file&gt;</span>`);
+    return;
+  }
+  
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+  
+  const targetPath = resolvePath(currentPath, args[0]);
+  const parsed = parsePath(githubUser, targetPath);
+  
+  if (parsed.path === '') {
+    terminal.print(`<span class="error">Not a file. Specify a file path.</span>`);
+    return;
+  }
+  
+  terminal.showLoading();
+  
+  try {
+    const token = session.getAccessToken();
+    const response = await fetch(
+      `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/contents/${parsed.path}`,
+      {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      terminal.hideLoading();
+      if (response.status === 404) {
+        terminal.print(`<span class="error">File not found: ${parsed.path}</span>`);
+      } else {
+        terminal.print(`<span class="error">Error loading file</span>`);
+      }
+      return;
+    }
+    
+    const file = await response.json();
+    
+    if (file.type !== 'file') {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Not a file: ${parsed.path}</span>`);
+      return;
+    }
+    
+    terminal.hideLoading();
+    
+    const content = decodeURIComponent(escape(atob(file.content)));
+    
+    openEditor({
+      owner: parsed.owner,
+      repo: parsed.repo,
+      path: parsed.path,
+      content: content,
+      sha: file.sha,
+      terminal: terminal
+    });
+    
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
