@@ -1,113 +1,190 @@
-const GITHUB_OS_STAGING_KEY = 'github_os_staging';
-
-function checkLocalStorage() {
-  try {
-    const test = '__storage_test__';
-    localStorage.setItem(test, test);
-    localStorage.removeItem(test);
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-function getStagingData() {
-  if (!checkLocalStorage()) {
-    throw new Error('localStorage is not available');
-  }
-  
-  try {
-    const data = localStorage.getItem(GITHUB_OS_STAGING_KEY);
-    if (!data) {
-      return { creates: {}, updates: {}, deletes: {} };
-    }
-    
-    const parsed = JSON.parse(data);
-    return {
-      creates: parsed.creates || {},
-      updates: parsed.updates || {},
-      deletes: parsed.deletes || {}
-    };
-  } catch (e) {
-    return { creates: {}, updates: {}, deletes: {} };
-  }
-}
-
-function saveStagingData(data) {
-  if (!checkLocalStorage()) {
-    throw new Error('localStorage is not available');
-  }
-  
-  try {
-    localStorage.setItem(GITHUB_OS_STAGING_KEY, JSON.stringify(data));
-  } catch (e) {
-    if (e.name === 'QuotaExceededError' || e.code === 22) {
-      throw new Error('localStorage quota exceeded. Please clear some staged changes.');
-    }
-    throw e;
-  }
-}
-
-export function stageCreate(path, content) {
-  const staging = getStagingData();
-  
-  if (staging.creates[path]) {
-    throw new Error('Path already staged for creation');
-  }
-  
-  if (staging.updates[path]) {
-    throw new Error('Path already staged for update');
-  }
-  
-  staging.creates[path] = { content };
-  saveStagingData(staging);
-}
-
-export function stageUpdate(path, content, sha) {
-  if (!sha) {
-    throw new Error('SHA is required for updates');
-  }
-  
-  const staging = getStagingData();
-  
-  if (staging.deletes[path]) {
-    throw new Error('Path already staged for deletion');
-  }
-  
-  staging.updates[path] = { content, sha };
-  saveStagingData(staging);
-}
-
-export function stageDelete(path, sha) {
-  if (!sha) {
-    throw new Error('SHA is required for deletions');
-  }
-  
-  const staging = getStagingData();
-  
-  if (staging.creates[path]) {
-    delete staging.creates[path];
-    saveStagingData(staging);
-    return;
-  }
-  
-  if (staging.updates[path]) {
-    delete staging.updates[path];
-  }
-  
-  staging.deletes[path] = { sha };
-  saveStagingData(staging);
-}
+const STAGING_KEY = 'github_os_staged_changes';
 
 export function getStagedChanges() {
-  return getStagingData();
+  try {
+    const data = localStorage.getItem(STAGING_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStagedChanges(changes) {
+  localStorage.setItem(STAGING_KEY, JSON.stringify(changes));
+}
+
+export function stageCreate(owner, repo, path, content = '') {
+  const fullPath = `${owner}/${repo}/${path}`;
+  const changes = getStagedChanges();
+  
+  const existingIndex = changes.findIndex(c => c.path === fullPath);
+  if (existingIndex >= 0) {
+    changes[existingIndex] = {
+      type: 'create',
+      path: fullPath,
+      content: btoa(unescape(encodeURIComponent(content))),
+      timestamp: Date.now()
+    };
+  } else {
+    changes.push({
+      type: 'create',
+      path: fullPath,
+      content: btoa(unescape(encodeURIComponent(content))),
+      timestamp: Date.now()
+    });
+  }
+  
+  saveStagedChanges(changes);
+}
+
+export function stageUpdate(owner, repo, path, content, sha) {
+  const fullPath = `${owner}/${repo}/${path}`;
+  const changes = getStagedChanges();
+  
+  const existingIndex = changes.findIndex(c => c.path === fullPath);
+  if (existingIndex >= 0) {
+    changes[existingIndex] = {
+      type: 'update',
+      path: fullPath,
+      content: btoa(unescape(encodeURIComponent(content))),
+      sha: sha,
+      timestamp: Date.now()
+    };
+  } else {
+    changes.push({
+      type: 'update',
+      path: fullPath,
+      content: btoa(unescape(encodeURIComponent(content))),
+      sha: sha,
+      timestamp: Date.now()
+    });
+  }
+  
+  saveStagedChanges(changes);
+}
+
+export function stageDelete(owner, repo, path, sha) {
+  const fullPath = `${owner}/${repo}/${path}`;
+  const changes = getStagedChanges();
+  
+  const existingIndex = changes.findIndex(c => c.path === fullPath);
+  if (existingIndex >= 0) {
+    changes[existingIndex] = {
+      type: 'delete',
+      path: fullPath,
+      sha: sha,
+      timestamp: Date.now()
+    };
+  } else {
+    changes.push({
+      type: 'delete',
+      path: fullPath,
+      sha: sha,
+      timestamp: Date.now()
+    });
+  }
+  
+  saveStagedChanges(changes);
+}
+
+export function unstageFile(path) {
+  const changes = getStagedChanges();
+  const filtered = changes.filter(c => c.path !== path);
+  saveStagedChanges(filtered);
+  return changes.length !== filtered.length;
 }
 
 export function clearStaging() {
-  saveStagingData({ creates: {}, updates: {}, deletes: {} });
+  const changes = getStagedChanges();
+  const count = changes.length;
+  localStorage.removeItem(STAGING_KEY);
+  return count;
 }
 
-export function isStaged(path) {
-  const staging = getStagingData();
-  return !!(staging.creates[path] || staging.updates[path] || staging.deletes[path]);
+export async function commitStaged(token, message, owner, repo) {
+  const changes = getStagedChanges();
+  
+  if (changes.length === 0) {
+    return { success: false, error: 'Nothing to commit' };
+  }
+  
+  const results = [];
+  
+  for (const change of changes) {
+    try {
+      let response;
+      
+      if (change.type === 'create') {
+        response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${change.path.split('/').slice(2).join('/')}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Accept': 'application/vnd.github.v3+json',
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              message: message,
+              content: change.content
+            })
+          }
+        );
+      } else if (change.type === 'update') {
+        response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${change.path.split('/').slice(2).join('/')}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Accept': 'application/vnd.github.v3+json',
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              message: message,
+              content: change.content,
+              sha: change.sha
+            })
+          }
+        );
+      } else if (change.type === 'delete') {
+        response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${change.path.split('/').slice(2).join('/')}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Accept': 'application/vnd.github.v3+json',
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              message: message,
+              sha: change.sha
+            })
+          }
+        );
+      }
+      
+      if (response && response.ok) {
+        results.push({ path: change.path, success: true });
+      } else {
+        const errorData = response ? await response.json() : {};
+        results.push({ path: change.path, success: false, error: errorData.message || 'API error' });
+      }
+    } catch (error) {
+      results.push({ path: change.path, success: false, error: error.message });
+    }
+  }
+  
+  const allSuccess = results.every(r => r.success);
+  if (allSuccess) {
+    clearStaging();
+    return { success: true, results, count: results.length };
+  }
+  
+  const successPaths = results.filter(r => r.success).map(r => r.path);
+  const remainingChanges = changes.filter(c => !successPaths.includes(c.path));
+  saveStagedChanges(remainingChanges);
+  
+  return { success: false, results, error: 'Some commits failed' };
 }
