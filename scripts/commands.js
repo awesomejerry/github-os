@@ -313,7 +313,11 @@ async function cmdCd(terminal, githubUser, args) {
     } else {
       // Check if path exists and is a directory
       const contents = await fetchRepoContents(parsed.owner, parsed.repo, parsed.path);
-      if (!Array.isArray(contents)) {
+      
+      // GitHub API returns array for directories, object for files
+      // File objects have type: 'file' property
+      const isFile = !Array.isArray(contents) || contents.type === 'file';
+      if (isFile) {
         terminal.print(`<span class="error">Not a directory: ${args[0]}</span>`);
         return;
       }
