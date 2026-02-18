@@ -779,4 +779,183 @@ export function clearBranchCache(owner, repo) {
   }
 }
 
+export async function getBranchRef(owner, repo, branch) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+      { headers: getHeaders() }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Branch '${branch}' not found`);
+      }
+      throw new Error('Failed to get branch ref');
+    }
+    
+    const data = await response.json();
+    return data.object.sha;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function getTreeFromCommit(owner, repo, commitSha) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/commits/${commitSha}`,
+      { headers: getHeaders() }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to get commit');
+    }
+    
+    const data = await response.json();
+    return data.tree.sha;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function createTree(owner, repo, baseTreeSha, entries) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/trees`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          base_tree: baseTreeSha,
+          tree: entries
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to create tree');
+    }
+    
+    const data = await response.json();
+    return data.sha;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function createGitCommit(owner, repo, treeSha, parentSha, message) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/commits`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          message,
+          tree: treeSha,
+          parents: [parentSha]
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to create commit');
+    }
+    
+    const data = await response.json();
+    return data.sha;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function updateBranchRef(owner, repo, branch, commitSha) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+      {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          sha: commitSha
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 422) {
+        throw new Error('Conflict: branch was modified. Please retry.');
+      }
+      throw new Error('Failed to update branch');
+    }
+    
+    return true;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function batchCommit(owner, repo, branch, changes, message) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+  
+  const { creates, updates, deletes } = changes;
+  const totalChanges = creates.length + updates.length + deletes.length;
+  
+  if (totalChanges === 0) {
+    throw new Error('No staged changes');
+  }
+  
+  const treeEntries = [];
+  
+  for (const item of creates) {
+    const encodedContent = btoa(unescape(encodeURIComponent(item.content)));
+    treeEntries.push({
+      path: item.path,
+      mode: '100644',
+      type: 'blob',
+      content: encodedContent
+    });
+  }
+  
+  for (const item of updates) {
+    const encodedContent = btoa(unescape(encodeURIComponent(item.content)));
+    treeEntries.push({
+      path: item.path,
+      mode: '100644',
+      type: 'blob',
+      content: encodedContent
+    });
+  }
+  
+  for (const item of deletes) {
+    treeEntries.push({
+      path: item.path,
+      mode: '100644',
+      type: 'blob',
+      sha: null
+    });
+  }
+  
+  const parentSha = await getBranchRef(owner, repo, branch);
+  const baseTreeSha = await getTreeFromCommit(owner, repo, parentSha);
+  const newTreeSha = await createTree(owner, repo, baseTreeSha, treeEntries);
+  const commitSha = await createGitCommit(owner, repo, newTreeSha, parentSha, message);
+  await updateBranchRef(owner, repo, branch, commitSha);
+  
+  clearCache();
+  clearBranchCache(owner, repo);
+  
+  return {
+    sha: commitSha,
+    stats: {
+      created: creates.length,
+      updated: updates.length,
+      deleted: deletes.length,
+      total: totalChanges
+    }
+  };
+}
+
 export { getHeaders };

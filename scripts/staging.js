@@ -1,190 +1,134 @@
-const STAGING_KEY = 'github_os_staged_changes';
+// GitHub OS - Staging Area Module
+
+const STORAGE_KEY = 'github_os_staging';
+
+function loadStaging() {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (data) {
+      const parsed = JSON.parse(data);
+      return {
+        creates: parsed.creates || {},
+        updates: parsed.updates || {},
+        deletes: parsed.deletes || {}
+      };
+    }
+  } catch {
+    // ignore errors
+  }
+  return { creates: {}, updates: {}, deletes: {} };
+}
+
+function saveStaging(staging) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(staging));
+  } catch {
+    // ignore errors
+  }
+}
 
 export function getStagedChanges() {
-  try {
-    const data = localStorage.getItem(STAGING_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
+  const staging = loadStaging();
+  return {
+    creates: Object.entries(staging.creates).map(([path, content]) => ({
+      path,
+      content
+    })),
+    updates: Object.entries(staging.updates).map(([path, data]) => ({
+      path,
+      content: data.content,
+      sha: data.sha
+    })),
+    deletes: Object.entries(staging.deletes).map(([path, sha]) => ({
+      path,
+      sha
+    }))
+  };
 }
 
-function saveStagedChanges(changes) {
-  localStorage.setItem(STAGING_KEY, JSON.stringify(changes));
-}
-
-export function stageCreate(owner, repo, path, content = '') {
-  const fullPath = `${owner}/${repo}/${path}`;
-  const changes = getStagedChanges();
+export function stageCreate(path, content) {
+  const staging = loadStaging();
   
-  const existingIndex = changes.findIndex(c => c.path === fullPath);
-  if (existingIndex >= 0) {
-    changes[existingIndex] = {
-      type: 'create',
-      path: fullPath,
-      content: btoa(unescape(encodeURIComponent(content))),
-      timestamp: Date.now()
-    };
+  if (staging.deletes[path]) {
+    staging.deletes[path] = undefined;
+    delete staging.deletes[path];
+  }
+  
+  if (staging.updates[path]) {
+    staging.updates[path] = undefined;
+    delete staging.updates[path];
+  }
+  
+  staging.creates[path] = content;
+  saveStaging(staging);
+}
+
+export function stageUpdate(path, content, sha) {
+  const staging = loadStaging();
+  
+  if (staging.deletes[path]) {
+    staging.deletes[path] = undefined;
+    delete staging.deletes[path];
+  }
+  
+  if (staging.creates[path]) {
+    staging.creates[path] = content;
   } else {
-    changes.push({
-      type: 'create',
-      path: fullPath,
-      content: btoa(unescape(encodeURIComponent(content))),
-      timestamp: Date.now()
-    });
+    staging.updates[path] = { content, sha };
   }
   
-  saveStagedChanges(changes);
+  saveStaging(staging);
 }
 
-export function stageUpdate(owner, repo, path, content, sha) {
-  const fullPath = `${owner}/${repo}/${path}`;
-  const changes = getStagedChanges();
+export function stageDelete(path, sha) {
+  const staging = loadStaging();
   
-  const existingIndex = changes.findIndex(c => c.path === fullPath);
-  if (existingIndex >= 0) {
-    changes[existingIndex] = {
-      type: 'update',
-      path: fullPath,
-      content: btoa(unescape(encodeURIComponent(content))),
-      sha: sha,
-      timestamp: Date.now()
-    };
-  } else {
-    changes.push({
-      type: 'update',
-      path: fullPath,
-      content: btoa(unescape(encodeURIComponent(content))),
-      sha: sha,
-      timestamp: Date.now()
-    });
+  if (staging.creates[path]) {
+    staging.creates[path] = undefined;
+    delete staging.creates[path];
+    saveStaging(staging);
+    return;
   }
   
-  saveStagedChanges(changes);
-}
-
-export function stageDelete(owner, repo, path, sha) {
-  const fullPath = `${owner}/${repo}/${path}`;
-  const changes = getStagedChanges();
-  
-  const existingIndex = changes.findIndex(c => c.path === fullPath);
-  if (existingIndex >= 0) {
-    changes[existingIndex] = {
-      type: 'delete',
-      path: fullPath,
-      sha: sha,
-      timestamp: Date.now()
-    };
-  } else {
-    changes.push({
-      type: 'delete',
-      path: fullPath,
-      sha: sha,
-      timestamp: Date.now()
-    });
+  if (staging.updates[path]) {
+    staging.updates[path] = undefined;
+    delete staging.updates[path];
   }
   
-  saveStagedChanges(changes);
+  staging.deletes[path] = sha;
+  saveStaging(staging);
 }
 
-export function unstageFile(path) {
-  const changes = getStagedChanges();
-  const filtered = changes.filter(c => c.path !== path);
-  saveStagedChanges(filtered);
-  return changes.length !== filtered.length;
+export function unstage(path) {
+  const staging = loadStaging();
+  
+  if (staging.creates[path]) {
+    staging.creates[path] = undefined;
+    delete staging.creates[path];
+  }
+  
+  if (staging.updates[path]) {
+    staging.updates[path] = undefined;
+    delete staging.updates[path];
+  }
+  
+  if (staging.deletes[path]) {
+    staging.deletes[path] = undefined;
+    delete staging.deletes[path];
+  }
+  
+  saveStaging(staging);
 }
 
 export function clearStaging() {
-  const changes = getStagedChanges();
-  const count = changes.length;
-  localStorage.removeItem(STAGING_KEY);
-  return count;
+  localStorage.removeItem(STORAGE_KEY);
 }
 
-export async function commitStaged(token, message, owner, repo) {
-  const changes = getStagedChanges();
-  
-  if (changes.length === 0) {
-    return { success: false, error: 'Nothing to commit' };
-  }
-  
-  const results = [];
-  
-  for (const change of changes) {
-    try {
-      let response;
-      
-      if (change.type === 'create') {
-        response = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}/contents/${change.path.split('/').slice(2).join('/')}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Accept': 'application/vnd.github.v3+json',
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              message: message,
-              content: change.content
-            })
-          }
-        );
-      } else if (change.type === 'update') {
-        response = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}/contents/${change.path.split('/').slice(2).join('/')}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Accept': 'application/vnd.github.v3+json',
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              message: message,
-              content: change.content,
-              sha: change.sha
-            })
-          }
-        );
-      } else if (change.type === 'delete') {
-        response = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}/contents/${change.path.split('/').slice(2).join('/')}`,
-          {
-            method: 'DELETE',
-            headers: {
-              'Accept': 'application/vnd.github.v3+json',
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              message: message,
-              sha: change.sha
-            })
-          }
-        );
-      }
-      
-      if (response && response.ok) {
-        results.push({ path: change.path, success: true });
-      } else {
-        const errorData = response ? await response.json() : {};
-        results.push({ path: change.path, success: false, error: errorData.message || 'API error' });
-      }
-    } catch (error) {
-      results.push({ path: change.path, success: false, error: error.message });
-    }
-  }
-  
-  const allSuccess = results.every(r => r.success);
-  if (allSuccess) {
-    clearStaging();
-    return { success: true, results, count: results.length };
-  }
-  
-  const successPaths = results.filter(r => r.success).map(r => r.path);
-  const remainingChanges = changes.filter(c => !successPaths.includes(c.path));
-  saveStagedChanges(remainingChanges);
-  
-  return { success: false, results, error: 'Some commits failed' };
+export function hasStagedChanges() {
+  const staging = loadStaging();
+  return (
+    Object.keys(staging.creates).length > 0 ||
+    Object.keys(staging.updates).length > 0 ||
+    Object.keys(staging.deletes).length > 0
+  );
 }

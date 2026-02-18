@@ -1,10 +1,10 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
-import { stageCreate, stageUpdate, stageDelete, getStagedChanges, unstageFile, clearStaging, commitStaged } from './staging.js';
+import { getStagedChanges, stageUpdate, clearStaging, hasStagedChanges } from './staging.js';
 
 let auth, session;
 
@@ -71,7 +71,8 @@ export const commands = {
   edit: cmdEdit,
   checkout: cmdCheckout,
   // Staging commands
-  unstage: cmdUnstage,
+  add: cmdAdd,
+  diff: cmdDiff,
   commit: cmdCommit
 };
 
@@ -136,7 +137,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'commit'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -203,20 +204,19 @@ function cmdHelp(terminal) {
   <span class="info">readme</span>            Display README.md in current directory
   <span class="info">grep</span> &lt;pattern&gt; [file]   Search for pattern (file or repo-wide)
   <span class="info">download</span> &lt;file&gt;  Download file to your computer
-  <span class="info">edit</span> &lt;file&gt;       Edit file and stage changes
+  <span class="info">edit</span> &lt;file&gt;       Edit file and save to GitHub
 
  <span class="info">File Operations (Write - requires login)</span>
-  <span class="info">touch</span> &lt;file&gt;      Stage new file
-  <span class="info">mkdir</span> &lt;dir&gt;       Stage new directory
-  <span class="info">rm</span> &lt;file&gt;         Stage file deletion (with confirmation)
-  <span class="info">mv</span> &lt;src&gt; &lt;dest&gt;   Stage file move
-  <span class="info">cp</span> &lt;src&gt; &lt;dest&gt;   Stage file copy
+  <span class="info">touch</span> &lt;file&gt;      Create new file
+  <span class="info">mkdir</span> &lt;dir&gt;       Create directory
+  <span class="info">rm</span> &lt;file&gt;         Delete file (with confirmation)
+  <span class="info">mv</span> &lt;src&gt; &lt;dest&gt;   Move/rename file
+  <span class="info">cp</span> &lt;src&gt; &lt;dest&gt;   Copy file
 
- <span class="info">Staging</span>
-  <span class="info">status</span>            Show auth status and staged changes
-  <span class="info">unstage</span> &lt;path&gt;    Remove file from staging
-  <span class="info">unstage --all</span>     Clear all staged changes
-  <span class="info">commit</span> -m "msg"   Commit all staged changes to GitHub
+ <span class="info">Staging (Batch Commit)</span>
+  <span class="info">add</span> &lt;file&gt;        Stage file changes for commit
+  <span class="info">diff</span>              Show staged changes
+  <span class="info">commit</span> -m "msg"   Commit staged changes
 
  <span class="info">Repository</span>
     <span class="info">tree</span> [path]       Display directory tree
@@ -236,6 +236,7 @@ function cmdHelp(terminal) {
  <span class="info">Authentication</span>
     <span class="info">login</span>             Connect to GitHub with OAuth
     <span class="info">logout</span>            Disconnect from GitHub
+    <span class="info">status</span>            Show authentication status and rate limits
 
  <span class="info">Other</span>
   <span class="info">clear</span>             Clear terminal screen
@@ -246,7 +247,7 @@ function cmdHelp(terminal) {
   - Press <span class="success">Tab</span> to auto-complete paths
   - Press <span class="success">↑/↓</span> to navigate command history
   - Use <span class="success">grep -i</span> for case-insensitive search
-  - Changes are staged first, use <span class="success">commit -m "msg"</span> to save to GitHub
+  - Use <span class="success">add</span> + <span class="success">commit</span> for batch commits
 `;
   terminal.print(help);
 }
@@ -1002,7 +1003,7 @@ function cmdLogout(terminal) {
   }
 }
 
-async function cmdStatus(terminal, githubUser) {
+async function cmdStatus(terminal) {
   const currentSession = session.loadSession();
   
   if (!currentSession || !currentSession.username) {
@@ -1045,23 +1046,6 @@ async function cmdStatus(terminal, githubUser) {
   } catch (error) {
     terminal.print(`<span class="info">Rate limit:</span> Unable to fetch`);
   }
-  
-  terminal.print('');
-  terminal.print(`<span class="info">Staged changes:</span>`);
-  
-  const changes = getStagedChanges();
-  if (changes.length === 0) {
-    terminal.print(`  <span class="info">(no staged changes)</span>`);
-  } else {
-    changes.forEach(change => {
-      const indicator = change.type === 'create' ? '+' : 
-                        change.type === 'update' ? '~' : '-';
-      const displayPath = change.path;
-      terminal.print(`  <span class="${change.type === 'delete' ? 'error' : 'success'}">${indicator}</span> ${displayPath}`);
-    });
-    terminal.print(`  <span class="info">${changes.length} change(s) staged</span>`);
-    terminal.print(`  <span class="info">Use 'commit -m "message"' to save to GitHub</span>`);
-  }
 }
 
 async function cmdTouch(terminal, githubUser, args) {
@@ -1085,6 +1069,7 @@ async function cmdTouch(terminal, githubUser, args) {
   const parsed = parsePath(githubUser, currentPath);
   const targetPath = resolvePath(currentPath, args[0]);
   const targetParsed = parsePath(githubUser, targetPath);
+  const fileName = targetParsed.path.split('/').pop();
 
   terminal.showLoading();
   try {
@@ -1096,10 +1081,17 @@ async function cmdTouch(terminal, githubUser, args) {
       return;
     }
 
-    stageCreate(targetParsed.owner, targetParsed.repo, targetParsed.path, '');
+    const result = await createFile(
+      targetParsed.owner, 
+      targetParsed.repo, 
+      targetParsed.path, 
+      '', 
+      `Create ${fileName}`
+    );
     
     terminal.hideLoading();
-    terminal.print(`<span class="success">Staged: new file</span> ${args[0]}`);
+    terminal.print(`<span class="success">Created:</span> ${args[0]}`);
+    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
@@ -1126,6 +1118,7 @@ async function cmdMkdir(terminal, githubUser, args) {
 
   const parsed = parsePath(githubUser, currentPath);
   const dirName = args[0].replace(/\/$/, '');
+  const gitkeepPath = `${dirName}/.gitkeep`;
 
   terminal.showLoading();
   try {
@@ -1138,10 +1131,17 @@ async function cmdMkdir(terminal, githubUser, args) {
       return;
     }
 
-    stageCreate(parsed.owner, parsed.repo, `${fullDirPath}/.gitkeep`, '');
+    const result = await createFile(
+      parsed.owner, 
+      parsed.repo, 
+      fullDirPath + '/.gitkeep', 
+      '', 
+      `Create directory ${dirName}`
+    );
     
     terminal.hideLoading();
-    terminal.print(`<span class="success">Staged: new directory</span> ${dirName}/`);
+    terminal.print(`<span class="success">Created directory:</span> ${dirName}/`);
+    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
@@ -1169,13 +1169,14 @@ async function cmdRm(terminal, githubUser, args) {
   const parsed = parsePath(githubUser, currentPath);
   const targetPath = resolvePath(currentPath, args[0]);
   const targetParsed = parsePath(githubUser, targetPath);
+  const fileName = targetParsed.path.split('/').pop();
 
   terminal.showLoading();
   try {
     const fileInfo = await getFile(targetParsed.owner, targetParsed.repo, targetParsed.path);
     terminal.hideLoading();
     
-    terminal.print(`<span class="warning">Warning: This will delete "${args[0]}"</span>`);
+    terminal.print(`<span class="warning">Warning: This will permanently delete "${args[0]}"</span>`);
     terminal.print(`<span class="info">Type 'yes' to confirm:</span>`);
     
     terminal.waitForInput(async (confirmation) => {
@@ -1184,8 +1185,23 @@ async function cmdRm(terminal, githubUser, args) {
         return;
       }
 
-      stageDelete(targetParsed.owner, targetParsed.repo, targetParsed.path, fileInfo.sha);
-      terminal.print(`<span class="success">Staged: deleted</span> ${args[0]}`);
+      terminal.showLoading();
+      try {
+        const result = await deleteFile(
+          targetParsed.owner, 
+          targetParsed.repo, 
+          targetParsed.path, 
+          fileInfo.sha, 
+          `Delete ${fileName}`
+        );
+        
+        terminal.hideLoading();
+        terminal.print(`<span class="success">Deleted:</span> ${args[0]}`);
+        terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+      } catch (error) {
+        terminal.hideLoading();
+        terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+      }
     });
   } catch (error) {
     terminal.hideLoading();
@@ -1216,6 +1232,8 @@ async function cmdMv(terminal, githubUser, args) {
   const destPath = resolvePath(currentPath, args[1]);
   const srcParsed = parsePath(githubUser, srcPath);
   const destParsed = parsePath(githubUser, destPath);
+  const srcFileName = srcParsed.path.split('/').pop();
+  const destFileName = destParsed.path.split('/').pop();
 
   terminal.showLoading();
   try {
@@ -1228,11 +1246,25 @@ async function cmdMv(terminal, githubUser, args) {
       return;
     }
 
-    stageDelete(srcParsed.owner, srcParsed.repo, srcParsed.path, srcFile.sha);
-    stageCreate(destParsed.owner, destParsed.repo, destParsed.path, srcFile.content);
+    await createFile(
+      destParsed.owner, 
+      destParsed.repo, 
+      destParsed.path, 
+      srcFile.content, 
+      `Move ${srcFileName} to ${destFileName}`
+    );
+
+    const result = await deleteFile(
+      srcParsed.owner, 
+      srcParsed.repo, 
+      srcParsed.path, 
+      srcFile.sha, 
+      `Move ${srcFileName} to ${destFileName}`
+    );
     
     terminal.hideLoading();
-    terminal.print(`<span class="success">Staged: moved</span> ${args[0]} → ${args[1]}`);
+    terminal.print(`<span class="success">Moved:</span> ${args[0]} → ${args[1]}`);
+    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
@@ -1262,6 +1294,8 @@ async function cmdCp(terminal, githubUser, args) {
   const destPath = resolvePath(currentPath, args[1]);
   const srcParsed = parsePath(githubUser, srcPath);
   const destParsed = parsePath(githubUser, destPath);
+  const srcFileName = srcParsed.path.split('/').pop();
+  const destFileName = destParsed.path.split('/').pop();
 
   terminal.showLoading();
   try {
@@ -1274,10 +1308,17 @@ async function cmdCp(terminal, githubUser, args) {
       return;
     }
 
-    stageCreate(destParsed.owner, destParsed.repo, destParsed.path, srcFile.content);
+    const result = await createFile(
+      destParsed.owner, 
+      destParsed.repo, 
+      destParsed.path, 
+      srcFile.content, 
+      `Copy ${srcFileName} to ${destFileName}`
+    );
     
     terminal.hideLoading();
-    terminal.print(`<span class="success">Staged: copied</span> ${args[0]} → ${args[1]}`);
+    terminal.print(`<span class="success">Copied:</span> ${args[0]} → ${args[1]}`);
+    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
@@ -1506,30 +1547,110 @@ async function cmdCheckout(terminal, githubUser, args) {
   }
 }
 
-async function cmdUnstage(terminal, githubUser, args) {
-  if (args.length === 0) {
-    terminal.print(`<span class="error">Usage: unstage &lt;path&gt; | unstage --all</span>`);
+async function cmdAdd(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
     return;
   }
 
-  if (args[0] === '--all') {
-    const count = clearStaging();
-    terminal.print(`<span class="success">Cleared staging area</span> (${count} changes)`);
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: add &lt;file&gt; [file2] ...</span>`);
     return;
   }
 
   const currentPath = terminal.getPath();
-  const parsed = parsePath(githubUser, currentPath);
-  const targetPath = resolvePath(currentPath, args[0]);
-  const targetParsed = parsePath(githubUser, targetPath);
-  const fullPath = `${targetParsed.owner}/${targetParsed.repo}/${targetParsed.path}`;
-
-  const removed = unstageFile(fullPath);
-  if (removed) {
-    terminal.print(`<span class="success">Unstaged:</span> ${args[0]}`);
-  } else {
-    terminal.print(`<span class="info">Not staged:</span> ${args[0]}`);
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
   }
+
+  const parsed = parsePath(githubUser, currentPath);
+  
+  terminal.showLoading();
+  
+  let addedCount = 0;
+  let errorCount = 0;
+
+  for (const arg of args) {
+    const targetPath = resolvePath(currentPath, arg);
+    const targetParsed = parsePath(githubUser, targetPath);
+    
+    if (!targetParsed.path) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Not a file: ${arg}</span>`);
+      errorCount++;
+      continue;
+    }
+
+    try {
+      const fileInfo = await getFile(targetParsed.owner, targetParsed.repo, targetParsed.path);
+      stageUpdate(targetParsed.path, fileInfo.content, fileInfo.sha);
+      addedCount++;
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">File not found: ${arg}</span>`);
+      errorCount++;
+    }
+  }
+  
+  terminal.hideLoading();
+  
+  if (addedCount > 0) {
+    terminal.print(`<span class="success">Staged ${addedCount} file(s)</span>`);
+  }
+  if (errorCount > 0) {
+    terminal.print(`<span class="info">${errorCount} file(s) could not be staged</span>`);
+  }
+}
+
+async function cmdDiff(terminal, githubUser) {
+  const changes = getStagedChanges();
+  
+  if (!hasStagedChanges()) {
+    terminal.print(`<span class="info">No staged changes</span>`);
+    return;
+  }
+
+  terminal.print('');
+  
+  let totalInsertions = 0;
+  let totalDeletions = 0;
+  let filesChanged = 0;
+
+  for (const item of changes.creates) {
+    terminal.print(`<span class="success">+++ b/${item.path}</span> <span class="info">(new file)</span>`);
+    const lines = item.content.split('\n');
+    for (const line of lines) {
+      if (line.trim()) {
+        terminal.print(`<span class="success">+${escapeHtml(line)}</span>`);
+        totalInsertions++;
+      }
+    }
+    filesChanged++;
+    terminal.print('');
+  }
+
+  for (const item of changes.updates) {
+    terminal.print(`<span class="success">+++ b/${item.path}</span>`);
+    const lines = item.content.split('\n');
+    for (const line of lines) {
+      if (line.trim()) {
+        terminal.print(`<span class="success">+${escapeHtml(line)}</span>`);
+        totalInsertions++;
+      }
+    }
+    filesChanged++;
+    terminal.print('');
+  }
+
+  for (const item of changes.deletes) {
+    terminal.print(`<span class="error">--- a/${item.path}</span> <span class="info">(deleted)</span>`);
+    totalDeletions++;
+    filesChanged++;
+  }
+
+  terminal.print(`<span class="info">${filesChanged} file(s) changed, ${totalInsertions} insertion(s), ${totalDeletions} deletion(s)</span>`);
 }
 
 async function cmdCommit(terminal, githubUser, args) {
@@ -1538,43 +1659,56 @@ async function cmdCommit(terminal, githubUser, args) {
     return;
   }
 
-  const msgIndex = args.indexOf('-m');
-  if (msgIndex === -1 || msgIndex + 1 >= args.length) {
+  const messageIndex = args.indexOf('-m');
+  if (messageIndex === -1 || messageIndex + 1 >= args.length) {
     terminal.print(`<span class="error">Usage: commit -m "message"</span>`);
     return;
   }
 
-  const message = args.slice(msgIndex + 1).join(' ').replace(/^["']|["']$/g, '');
-  
-  const changes = getStagedChanges();
-  if (changes.length === 0) {
-    terminal.print(`<span class="info">Nothing to commit</span>`);
+  const message = args.slice(messageIndex + 1).join(' ');
+  if (!message || message.trim() === '') {
+    terminal.print(`<span class="error">Commit message cannot be empty</span>`);
+    return;
+  }
+
+  if (!hasStagedChanges()) {
+    terminal.print(`<span class="info">No staged changes to commit</span>`);
     return;
   }
 
   const currentPath = terminal.getPath();
-  const parsed = parsePath(githubUser, currentPath);
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
 
-  terminal.showLoading(`Committing ${changes.length} change(s)...`);
+  const parsed = parsePath(githubUser, currentPath);
+  const branch = terminal.getCurrentBranch ? terminal.getCurrentBranch() : null;
+  const targetBranch = branch || (await getRepoInfo(parsed.owner, parsed.repo)).default_branch;
+
+  const changes = getStagedChanges();
+  
+  terminal.showLoading(`Committing ${changes.creates.length + changes.updates.length + changes.deletes.length} changes...`);
   
   try {
-    const token = session.getAccessToken();
-    const result = await commitStaged(token, message, parsed.owner, parsed.repo);
+    const result = await batchCommit(
+      parsed.owner,
+      parsed.repo,
+      targetBranch,
+      changes,
+      message
+    );
     
     terminal.hideLoading();
     
-    if (result.success) {
-      terminal.print(`<span class="success">Committed ${result.count} change(s)</span>`);
-    } else {
-      terminal.print(`<span class="error">Commit failed:</span> ${result.error}`);
-      result.results.forEach(r => {
-        if (!r.success) {
-          terminal.print(`  <span class="error">${r.path}:</span> ${r.error}`);
-        }
-      });
-    }
+    clearStaging();
+    
+    terminal.print('');
+    terminal.print(`<span class="success">[${targetBranch} ${result.sha.substring(0, 7)}]</span> ${escapeHtml(message)}`);
+    terminal.print(`<span class="info">${result.stats.created} created, ${result.stats.updated} updated, ${result.stats.deleted} deleted</span>`);
   } catch (error) {
     terminal.hideLoading();
-    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }
