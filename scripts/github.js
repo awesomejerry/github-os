@@ -504,3 +504,176 @@ export async function fetchRepoContributors(owner, repo, count = 20) {
     throw new Error(`Failed to fetch contributors: ${error.message}`);
   }
 }
+
+export async function getFile(owner, repo, path) {
+  const cacheKey = `fileinfo:${owner}/${repo}/${path}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`,
+      { headers: getHeaders() }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error('File not found');
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      throw new Error('Failed to fetch file');
+    }
+    
+    const file = await response.json();
+    
+    if (file.type !== 'file') throw new Error('Not a file');
+    
+    const content = atob(file.content);
+    const result = { 
+      content, 
+      name: file.name, 
+      sha: file.sha,
+      path: file.path,
+      size: file.size
+    };
+    
+    cache.set(cacheKey, result);
+    return result;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function createFile(owner, repo, path, content, message) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const encodedContent = btoa(unescape(encodeURIComponent(content)));
+    
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`,
+      {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          message,
+          content: encodedContent
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 422) throw new Error('File already exists');
+      throw new Error('Failed to create file');
+    }
+    
+    const result = await response.json();
+    
+    clearCache();
+    
+    return {
+      sha: result.commit.sha,
+      content: result.content
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function updateFile(owner, repo, path, content, sha, message) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const encodedContent = btoa(unescape(encodeURIComponent(content)));
+    
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`,
+      {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          message,
+          content: encodedContent,
+          sha
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error('File not found');
+      if (response.status === 409) throw new Error('Conflict: file was modified');
+      throw new Error('Failed to update file');
+    }
+    
+    const result = await response.json();
+    
+    clearCache();
+    
+    return {
+      sha: result.commit.sha
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function deleteFile(owner, repo, path, sha, message) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`,
+      {
+        method: 'DELETE',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          message,
+          sha
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error('File not found');
+      if (response.status === 409) throw new Error('Conflict: file was modified');
+      throw new Error('Failed to delete file');
+    }
+    
+    const result = await response.json();
+    
+    clearCache();
+    
+    return {
+      sha: result.commit.sha
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function checkFileExists(owner, repo, path) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/contents/${path}`,
+      { headers: getHeaders() }
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export { getHeaders };

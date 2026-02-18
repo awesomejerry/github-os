@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 
@@ -59,7 +59,13 @@ export const commands = {
   // Auth commands
   login: cmdLogin,
   logout: cmdLogout,
-  status: cmdStatus
+  status: cmdStatus,
+  // File operations (write)
+  touch: cmdTouch,
+  mkdir: cmdMkdir,
+  rm: cmdRm,
+  mv: cmdMv,
+  cp: cmdCp
 };
 
 /**
@@ -123,7 +129,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -183,13 +189,20 @@ function cmdHelp(terminal) {
   <span class="info">cd</span> &lt;path&gt;        Change directory (use <span class="success">cd -</span> to go back)
   <span class="info">pwd</span>               Print working directory
 
- <span class="info">File Operations</span>
+ <span class="info">File Operations (Read)</span>
   <span class="info">cat</span> &lt;file&gt;        Display file contents
   <span class="info">head</span> &lt;file&gt; [n]   Display first n lines (default: 10)
   <span class="info">tail</span> &lt;file&gt; [n]   Display last n lines (default: 10)
   <span class="info">readme</span>            Display README.md in current directory
   <span class="info">grep</span> &lt;pattern&gt; [file]   Search for pattern (file or repo-wide)
   <span class="info">download</span> &lt;file&gt;  Download file to your computer
+
+ <span class="info">File Operations (Write - requires login)</span>
+  <span class="info">touch</span> &lt;file&gt;      Create new file
+  <span class="info">mkdir</span> &lt;dir&gt;       Create directory
+  <span class="info">rm</span> &lt;file&gt;         Delete file (with confirmation)
+  <span class="info">mv</span> &lt;src&gt; &lt;dest&gt;   Move/rename file
+  <span class="info">cp</span> &lt;src&gt; &lt;dest&gt;   Copy file
 
  <span class="info">Repository</span>
     <span class="info">tree</span> [path]       Display directory tree
@@ -1051,5 +1064,282 @@ async function cmdStatus(terminal) {
     }
   } catch (error) {
     terminal.print(`<span class="info">Rate limit:</span> Unable to fetch`);
+  }
+}
+
+async function cmdTouch(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: touch &lt;file&gt;</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const targetPath = resolvePath(currentPath, args[0]);
+  const targetParsed = parsePath(githubUser, targetPath);
+  const fileName = targetParsed.path.split('/').pop();
+
+  terminal.showLoading();
+  try {
+    const exists = await checkFileExists(targetParsed.owner, targetParsed.repo, targetParsed.path);
+    
+    if (exists) {
+      terminal.hideLoading();
+      terminal.print(`<span class="info">File already exists: ${args[0]}</span>`);
+      return;
+    }
+
+    const result = await createFile(
+      targetParsed.owner, 
+      targetParsed.repo, 
+      targetParsed.path, 
+      '', 
+      `Create ${fileName}`
+    );
+    
+    terminal.hideLoading();
+    terminal.print(`<span class="success">Created:</span> ${args[0]}`);
+    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+  }
+}
+
+async function cmdMkdir(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: mkdir &lt;directory&gt;</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const dirName = args[0].replace(/\/$/, '');
+  const gitkeepPath = `${dirName}/.gitkeep`;
+
+  terminal.showLoading();
+  try {
+    const fullDirPath = parsed.path ? `${parsed.path}/${dirName}` : dirName;
+    const exists = await checkFileExists(parsed.owner, parsed.repo, `${fullDirPath}/.gitkeep`);
+    
+    if (exists) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Directory already exists: ${dirName}</span>`);
+      return;
+    }
+
+    const result = await createFile(
+      parsed.owner, 
+      parsed.repo, 
+      fullDirPath + '/.gitkeep', 
+      '', 
+      `Create directory ${dirName}`
+    );
+    
+    terminal.hideLoading();
+    terminal.print(`<span class="success">Created directory:</span> ${dirName}/`);
+    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+  }
+}
+
+async function cmdRm(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: rm &lt;file&gt;</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const targetPath = resolvePath(currentPath, args[0]);
+  const targetParsed = parsePath(githubUser, targetPath);
+  const fileName = targetParsed.path.split('/').pop();
+
+  terminal.showLoading();
+  try {
+    const fileInfo = await getFile(targetParsed.owner, targetParsed.repo, targetParsed.path);
+    terminal.hideLoading();
+    
+    terminal.print(`<span class="warning">Warning: This will permanently delete "${args[0]}"</span>`);
+    terminal.print(`<span class="info">Type 'yes' to confirm:</span>`);
+    
+    terminal.waitForInput(async (confirmation) => {
+      if (confirmation.toLowerCase() !== 'yes') {
+        terminal.print(`<span class="info">Operation cancelled</span>`);
+        return;
+      }
+
+      terminal.showLoading();
+      try {
+        const result = await deleteFile(
+          targetParsed.owner, 
+          targetParsed.repo, 
+          targetParsed.path, 
+          fileInfo.sha, 
+          `Delete ${fileName}`
+        );
+        
+        terminal.hideLoading();
+        terminal.print(`<span class="success">Deleted:</span> ${args[0]}`);
+        terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+      } catch (error) {
+        terminal.hideLoading();
+        terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+      }
+    });
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+  }
+}
+
+async function cmdMv(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length < 2) {
+    terminal.print(`<span class="error">Usage: mv &lt;source&gt; &lt;destination&gt;</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const srcPath = resolvePath(currentPath, args[0]);
+  const destPath = resolvePath(currentPath, args[1]);
+  const srcParsed = parsePath(githubUser, srcPath);
+  const destParsed = parsePath(githubUser, destPath);
+  const srcFileName = srcParsed.path.split('/').pop();
+  const destFileName = destParsed.path.split('/').pop();
+
+  terminal.showLoading();
+  try {
+    const srcFile = await getFile(srcParsed.owner, srcParsed.repo, srcParsed.path);
+    
+    const destExists = await checkFileExists(destParsed.owner, destParsed.repo, destParsed.path);
+    if (destExists) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Destination already exists: ${args[1]}</span>`);
+      return;
+    }
+
+    await createFile(
+      destParsed.owner, 
+      destParsed.repo, 
+      destParsed.path, 
+      srcFile.content, 
+      `Move ${srcFileName} to ${destFileName}`
+    );
+
+    const result = await deleteFile(
+      srcParsed.owner, 
+      srcParsed.repo, 
+      srcParsed.path, 
+      srcFile.sha, 
+      `Move ${srcFileName} to ${destFileName}`
+    );
+    
+    terminal.hideLoading();
+    terminal.print(`<span class="success">Moved:</span> ${args[0]} → ${args[1]}`);
+    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+  }
+}
+
+async function cmdCp(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length < 2) {
+    terminal.print(`<span class="error">Usage: cp &lt;source&gt; &lt;destination&gt;</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const srcPath = resolvePath(currentPath, args[0]);
+  const destPath = resolvePath(currentPath, args[1]);
+  const srcParsed = parsePath(githubUser, srcPath);
+  const destParsed = parsePath(githubUser, destPath);
+  const srcFileName = srcParsed.path.split('/').pop();
+  const destFileName = destParsed.path.split('/').pop();
+
+  terminal.showLoading();
+  try {
+    const srcFile = await getFile(srcParsed.owner, srcParsed.repo, srcParsed.path);
+    
+    const destExists = await checkFileExists(destParsed.owner, destParsed.repo, destParsed.path);
+    if (destExists) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Destination already exists: ${args[1]}</span>`);
+      return;
+    }
+
+    const result = await createFile(
+      destParsed.owner, 
+      destParsed.repo, 
+      destParsed.path, 
+      srcFile.content, 
+      `Copy ${srcFileName} to ${destFileName}`
+    );
+    
+    terminal.hideLoading();
+    terminal.print(`<span class="success">Copied:</span> ${args[0]} → ${args[1]}`);
+    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
   }
 }
