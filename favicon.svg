@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Terminal window -->
+  <rect x="2" y="4" width="28" height="24" rx="3" fill="#1a1a2e"/>
+  <!-- Title bar -->
+  <rect x="2" y="4" width="28" height="5" rx="3" fill="#0f3460"/>
+  <rect x="2" y="7" width="28" height="2" fill="#0f3460"/>
+  <!-- Window buttons -->
+  <circle cx="7" cy="6.5" r="1.5" fill="#e94560"/>
+  <circle cx="12" cy="6.5" r="1.5" fill="#f5a623"/>
+  <circle cx="17" cy="6.5" r="1.5" fill="#7ed321"/>
+  <!-- Prompt line -->
+  <text x="5" y="18" font-family="monospace" font-size="8" font-weight="bold" fill="#00ff9f">$</text>
+  <rect x="11" y="12" width="12" height="2" fill="#4a5568"/>
+  <!-- Cursor -->
+  <rect x="11" y="20" width="6" height="2" fill="#00ff9f" opacity="0.8"/>
+</svg>
