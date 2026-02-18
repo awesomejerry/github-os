@@ -988,6 +988,13 @@ function cmdLogout(terminal) {
   if (currentSession && currentSession.username) {
     const username = currentSession.username;
     session.clearSession();
+    
+    // Clear API cache to ensure fresh data
+    import('./github.js').then(m => m.clearCache?.());
+    
+    // Update prompt to show guest
+    terminal.updatePrompt();
+    
     terminal.print(`<span class="success">Logged out from ${username}</span>`);
   } else {
     terminal.print(`<span class="info">No active session</span>`);
