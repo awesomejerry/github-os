@@ -311,8 +311,12 @@ async function cmdCd(terminal, githubUser, args) {
         return;
       }
     } else {
-      // Check if directory exists
-      await fetchRepoContents(parsed.owner, parsed.repo, parsed.path);
+      // Check if path exists and is a directory
+      const contents = await fetchRepoContents(parsed.owner, parsed.repo, parsed.path);
+      if (!Array.isArray(contents)) {
+        terminal.print(`<span class="error">Not a directory: ${args[0]}</span>`);
+        return;
+      }
     }
 
     terminal.setPath(targetPath);
