@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -67,7 +67,8 @@ export const commands = {
   rm: cmdRm,
   mv: cmdMv,
   cp: cmdCp,
-  edit: cmdEdit
+  edit: cmdEdit,
+  checkout: cmdCheckout
 };
 
 /**
@@ -212,6 +213,9 @@ function cmdHelp(terminal) {
     <span class="info">info</span>              Show repository details
     <span class="info">log</span> [count]       Show commit history (default: 10)
     <span class="info">branch</span>            List all branches (default marked with *)
+    <span class="info">branch -c &lt;name&gt;</span>  Create new branch (requires login)
+    <span class="info">branch -d &lt;name&gt;</span>  Delete branch (requires login)
+    <span class="info">checkout &lt;branch&gt;</span> Switch to branch
     <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
     <span class="info">issues</span> [--closed|--all]   List repository issues (default: open)
     <span class="info">releases</span> [count]  List repository releases (default: 10)
@@ -1421,5 +1425,150 @@ async function cmdEdit(terminal, githubUser, args) {
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
+  }
+}
+
+async function cmdBranch(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  
+  if (args[0] === '-c' && args[1]) {
+    await createBranchHandler(terminal, parsed, args[1]);
+    return;
+  }
+  
+  if (args[0] === '-d' && args[1]) {
+    await deleteBranchHandler(terminal, parsed, args[1]);
+    return;
+  }
+
+  terminal.showLoading();
+  try {
+    const [branches, repoInfo] = await Promise.all([
+      fetchRepoBranches(parsed.owner, parsed.repo),
+      getRepoInfo(parsed.owner, parsed.repo)
+    ]);
+    terminal.hideLoading();
+    
+    if (branches.length === 0) {
+      terminal.print(`<span class="info">No branches found</span>`);
+      return;
+    }
+    
+    const currentBranch = terminal.getCurrentBranch ? terminal.getCurrentBranch() : null;
+    
+    terminal.print('');
+    branches.forEach(branch => {
+      const isDefault = branch.name === repoInfo.default_branch;
+      const isCurrent = currentBranch === branch.name || (!currentBranch && isDefault);
+      const prefix = isCurrent ? '* ' : '  ';
+      const className = isCurrent ? 'success' : 'directory';
+      terminal.print(`${prefix}<span class="${className}">${branch.name}</span>`);
+    });
+    terminal.print(`\n<span class="info">${branches.length} branch(es)</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function createBranchHandler(terminal, parsed, branchName) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' first.</span>`);
+    return;
+  }
+  
+  if (!/^[a-zA-Z0-9._/-]+$/.test(branchName)) {
+    terminal.print(`<span class="error">Invalid branch name: ${escapeHtml(branchName)}</span>`);
+    return;
+  }
+  
+  terminal.showLoading(`Creating branch '${branchName}'...`);
+  try {
+    const sha = await getDefaultBranchSHA(parsed.owner, parsed.repo);
+    await createBranch(parsed.owner, parsed.repo, branchName, sha);
+    terminal.hideLoading();
+    terminal.print(`<span class="success">Created branch '${branchName}'</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function deleteBranchHandler(terminal, parsed, branchName) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' first.</span>`);
+    return;
+  }
+  
+  terminal.showLoading();
+  try {
+    const repoInfo = await getRepoInfo(parsed.owner, parsed.repo);
+    terminal.hideLoading();
+    
+    if (branchName === repoInfo.default_branch) {
+      terminal.print(`<span class="error">Cannot delete the default branch '${branchName}'</span>`);
+      return;
+    }
+    
+    const currentBranch = terminal.getCurrentBranch ? terminal.getCurrentBranch() : null;
+    if (currentBranch === branchName) {
+      terminal.print(`<span class="error">Cannot delete the current branch. Checkout another branch first.</span>`);
+      return;
+    }
+    
+    terminal.showLoading(`Deleting branch '${branchName}'...`);
+    await deleteBranch(parsed.owner, parsed.repo, branchName);
+    terminal.hideLoading();
+    terminal.print(`<span class="success">Deleted branch '${branchName}'</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdCheckout(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: checkout &lt;branch&gt;</span>`);
+    return;
+  }
+  
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+  
+  const parsed = parsePath(githubUser, currentPath);
+  const branchName = args[0];
+  
+  terminal.showLoading();
+  try {
+    const branches = await fetchRepoBranches(parsed.owner, parsed.repo);
+    terminal.hideLoading();
+    
+    const branchExists = branches.some(b => b.name === branchName);
+    if (!branchExists) {
+      terminal.print(`<span class="error">Branch '${branchName}' not found</span>`);
+      return;
+    }
+    
+    if (terminal.setCurrentBranch) {
+      terminal.setCurrentBranch(branchName);
+    }
+    
+    clearBranchCache(parsed.owner, parsed.repo);
+    
+    terminal.print(`<span class="success">Switched to branch '${branchName}'</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
 }

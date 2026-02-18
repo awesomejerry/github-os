@@ -676,4 +676,107 @@ export async function checkFileExists(owner, repo, path) {
   }
 }
 
+export async function getDefaultBranchSHA(owner, repo) {
+  try {
+    const repoInfo = await getRepoInfo(owner, repo);
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/refs/heads/${repoInfo.default_branch}`,
+      { headers: getHeaders() }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to get default branch SHA');
+    }
+    
+    const data = await response.json();
+    return data.object.sha;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function createBranch(owner, repo, name, sha) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/refs`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          ref: `refs/heads/${name}`,
+          sha: sha
+        })
+      }
+    );
+    
+    if (response.status === 401) {
+      throw new Error('Authentication required');
+    }
+    
+    if (response.status === 403) {
+      throw new Error('Permission denied');
+    }
+    
+    if (response.status === 422) {
+      throw new Error(`Branch '${name}' already exists`);
+    }
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to create branch');
+    }
+    
+    clearBranchCache(owner, repo);
+    
+    return true;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function deleteBranch(owner, repo, name) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/git/refs/heads/${name}`,
+      {
+        method: 'DELETE',
+        headers: getHeaders()
+      }
+    );
+    
+    if (response.status === 401) {
+      throw new Error('Authentication required');
+    }
+    
+    if (response.status === 403) {
+      throw new Error('Permission denied or branch is protected');
+    }
+    
+    if (response.status === 404) {
+      throw new Error(`Branch '${name}' not found`);
+    }
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to delete branch');
+    }
+    
+    clearBranchCache(owner, repo);
+    
+    return true;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export function clearBranchCache(owner, repo) {
+  for (const key of cache.keys()) {
+    if (key.startsWith(`branches:${owner}/${repo}`) ||
+        key.startsWith(`ref:${owner}/${repo}`) ||
+        key.startsWith(`tree:${owner}/${repo}`)) {
+      cache.delete(key);
+    }
+  }
+}
+
 export { getHeaders };

@@ -16,6 +16,7 @@ export class Terminal {
     this.historyIndex = -1;
     this.currentPath = '/';
     this.previousPath = null;
+    this.currentBranch = null;
     
     // Tab completion state
     this.tabState = {
@@ -243,6 +244,20 @@ export class Terminal {
    */
   getPreviousPath() {
     return this.previousPath;
+  }
+
+  /**
+   * Set current branch
+   */
+  setCurrentBranch(branch) {
+    this.currentBranch = branch;
+  }
+
+  /**
+   * Get current branch
+   */
+  getCurrentBranch() {
+    return this.currentBranch;
   }
 
   /**
