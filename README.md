@@ -47,7 +47,7 @@ A web-based terminal interface that mimics a VM file system, browsing GitHub rep
 | `contributors [count]` | List contributors |
 | `readme` | Display README.md |
 
-### Authentication (NEW in v2.0)
+### Authentication (v2.0+)
 | Command | Description |
 |---------|-------------|
 | `login` | Connect to GitHub with OAuth |
@@ -80,19 +80,30 @@ To access private repos and get 5000 requests/hour:
    - Click "New OAuth App"
    - Set:
      - Application name: `GitHub OS`
-     - Homepage URL: `https://<username>.github.io/github-os/`
-     - Callback URL: `https://<username>.github.io/github-os/callback.html`
+     - Homepage URL: `https://your-domain.com/github-os/`
+     - Callback URL: `https://your-domain.com/github-os/callback.html`
+   - Generate a Client Secret
 
-2. **Update Client ID:**
-   Edit `scripts/auth.js` and replace the clientId:
+2. **Deploy Cloudflare Worker** (for token exchange):
+   ```bash
+   cd github-os-worker
+   npm install -g wrangler
+   wrangler login
+   wrangler secret put GITHUB_CLIENT_SECRET  # paste your secret
+   wrangler deploy
+   ```
+
+3. **Update Configuration:**
+   Edit `scripts/auth.js`:
    ```javascript
    const OAUTH_CONFIG = {
-     clientId: 'YOUR_CLIENT_ID_HERE',
-     // ...
+     clientId: 'YOUR_CLIENT_ID',
+     redirectUri: 'https://your-domain.com/github-os/callback.html',
+     tokenProxyUrl: 'https://your-worker.workers.dev'
    };
    ```
 
-3. **Deploy and Login:**
+4. **Deploy and Login:**
    - Push to GitHub Pages
    - Run `login` command in the terminal
 

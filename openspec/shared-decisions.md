@@ -1,4 +1,4 @@
-# Shared Decisions - GitHub OS v2.0 Auth
+# Shared Decisions - GitHub OS v2.0.1 Auth
 
 > 所有 auth 相關模組必須遵守此文件定義的規範
 
@@ -255,33 +255,63 @@ github_os_sessions → [
 
 ```
 scripts/
-├── auth.js          # OAuth flow (NEW)
-├── session.js       # Session management (NEW)
-├── commands.js      # Add login/logout/status commands
-├── github.js        # Add auth header support
-├── terminal.js      # Update prompt format
-└── app.js           # Init session on load
+├── auth.js          # OAuth PKCE flow + token exchange via worker
+├── session.js       # Session management (localStorage)
+├── commands.js      # login/logout/status commands + cache clearing
+├── github.js        # Auth header support + clearCache()
+├── terminal.js      # Dynamic prompt (username/guest)
+├── app.js           # Session validation on init + cache clearing
+├── config.js        # Configuration
+└── utils.js         # Utilities
 
-callback.html        # OAuth callback page (NEW)
+callback.html        # OAuth callback page
+
+github-os-worker/    # Cloudflare Worker (for CORS-free token exchange)
+├── worker.js        # Token exchange endpoint
+├── wrangler.toml    # Cloudflare config
+└── README.md        # Deploy instructions
+
 styles/
-└── main.css         # Add private repo indicator styles
+└── main.css         # Terminal styles
+
+tests/unit/
+├── auth.test.js     # Auth module tests
+├── session.test.js  # Session module tests
+├── github.test.js   # GitHub API tests
+└── ...
 ```
+
+## 10. Token Exchange (Cloudflare Worker)
+
+Due to CORS restrictions, token exchange must go through a backend proxy.
+
+### Worker Endpoint
+```
+POST https://github-os-token.awesomejerryshen.workers.dev
+
+Body: { code, code_verifier, redirect_uri }
+Response: { access_token, token_type, scope }
+```
+
+### Secrets
+- `GITHUB_CLIENT_SECRET` - Set via `wrangler secret put`
 
 ---
 
-## 10. Testing Strategy
+## 11. Testing Strategy
 
 ### Unit Tests
-- `auth.js`: PKCE generation, token exchange
+- `auth.js`: PKCE generation, token exchange, validation
 - `session.js`: localStorage operations, account switching
+- `github.js`: API calls, auth headers, cache clearing
 
 ### E2E Tests
 - Login flow (mock OAuth)
-- Logout flow
+- Logout flow + prompt update
 - Private repo access
 - Rate limit display
 
 ---
 
-*Last updated: 2026-02-17*
-*Version: v2.0-alpha*
+*Last updated: 2026-02-18*
+*Version: v2.0.1*
