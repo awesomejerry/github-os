@@ -1,6 +1,7 @@
 // GitHub OS - File Editor
 
 import { getAccessToken, isAuthenticated } from './session.js';
+import { stageUpdate } from './staging.js';
 
 let currentEditorState = null;
 
@@ -105,7 +106,6 @@ export function closeModal(showSuccess = false) {
   }
   
   if (showSuccess && currentEditorState?.terminal) {
-    currentEditorState.terminal.print(`<span class="success">File saved: ${currentEditorState.path}</span>`);
   }
   
   currentEditorState = null;
@@ -117,7 +117,7 @@ export function closeModal(showSuccess = false) {
 }
 
 /**
- * Save file to GitHub
+ * Save file to staging
  */
 async function saveFile() {
   if (!currentEditorState) return;
@@ -134,58 +134,10 @@ async function saveFile() {
     return;
   }
   
-  const saveBtn = document.getElementById('editor-save');
-  if (saveBtn) {
-    saveBtn.textContent = 'Saving...';
-    saveBtn.disabled = true;
-  }
+  stageUpdate(owner, repo, path, content, sha);
   
-  try {
-    const token = getAccessToken();
-    const encodedContent = btoa(unescape(encodeURIComponent(content)));
-    
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
-      method: 'PUT',
-      headers: {
-        'Accept': 'application/vnd.github.v3+json',
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: `Update ${path}`,
-        content: encodedContent,
-        sha: sha
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      
-      if (response.status === 409) {
-        terminal.print(`<span class="error">Conflict: File has been modified. Please reload and try again.</span>`);
-      } else if (response.status === 403) {
-        terminal.print(`<span class="error">Permission denied. Check your token has 'repo' scope.</span>`);
-      } else {
-        throw new Error(error.message || 'Failed to save file');
-      }
-      
-      if (saveBtn) {
-        saveBtn.textContent = 'Save (Ctrl+S)';
-        saveBtn.disabled = false;
-      }
-      return;
-    }
-    
-    closeModal(true);
-    
-  } catch (error) {
-    terminal.print(`<span class="error">Error saving file: ${escapeHtml(error.message)}</span>`);
-    
-    if (saveBtn) {
-      saveBtn.textContent = 'Save (Ctrl+S)';
-      saveBtn.disabled = false;
-    }
-  }
+  closeModal(true);
+  terminal.print(`<span class="success">Staged: modified</span> ${path}`);
 }
 
 /**
