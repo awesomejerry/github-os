@@ -85,7 +85,7 @@ class GitHubOS {
     const statusText = loggedIn ? '(logged in)' : '(anonymous)';
     
     const welcomeText = `
-<span class="welcome">Welcome to GitHub OS v2.3.2</span>
+<span class="welcome">Welcome to GitHub OS v2.3.3</span>
 Connecting to GitHub user: <span class="success">${userDisplay}</span> <span class="info">${statusText}</span>
 
 Type <span class="info">'help'</span> for available commands.
