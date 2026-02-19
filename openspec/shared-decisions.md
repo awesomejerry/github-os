@@ -1,4 +1,4 @@
-# Shared Decisions - GitHub OS v2.2.1
+# Shared Decisions - GitHub OS v2.2.2
 
 > 所有模組必須遵守此文件定義的規範
 

@@ -17,6 +17,7 @@ export class Terminal {
     this.currentPath = '/';
     this.previousPath = null;
     this.currentBranch = null;
+    this._waitingForInput = false;
     
     // Tab completion state
     this.tabState = {
@@ -35,6 +36,11 @@ export class Terminal {
   setupEventListeners() {
     this.input.addEventListener('keydown', async (e) => {
       if (e.key === 'Enter') {
+        // Skip if waiting for input (waitForInput handles this)
+        if (this._waitingForInput) {
+          return;
+        }
+        
         const cmdLine = this.input.value;
         this.input.value = '';
         this.resetTabState();
@@ -277,6 +283,7 @@ export class Terminal {
     this.promptEl.textContent = promptText;
     this.input.value = '';
     this.input.focus();
+    this._waitingForInput = true;
     
     const handler = async (e) => {
       if (e.key === 'Enter') {
@@ -284,6 +291,7 @@ export class Terminal {
         const input = this.input.value.trim();
         this.input.value = '';
         this.promptEl.textContent = originalPrompt;
+        this._waitingForInput = false;
         this.input.removeEventListener('keydown', handler);
         await callback(input);
       }
