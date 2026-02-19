@@ -429,6 +429,98 @@ export async function fetchRepoIssues(owner, repo, state = 'open') {
   }
 }
 
+export async function fetchRepoPRs(owner, repo, state = 'open') {
+  const cacheKey = `prs:${owner}/${repo}:${state}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls?state=${state}&per_page=30`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch pull requests');
+    }
+    
+    const prs = await response.json();
+    
+    const formattedPRs = prs.map(pr => ({
+      number: pr.number,
+      title: pr.title,
+      author: pr.user.login,
+      labels: pr.labels.map(label => label.name),
+      created_at: pr.created_at,
+      state: pr.state,
+      draft: pr.draft,
+      head_branch: pr.head.ref,
+      base_branch: pr.base.ref,
+      html_url: pr.html_url
+    }));
+    
+    cache.set(cacheKey, formattedPRs);
+    return formattedPRs;
+  } catch (error) {
+    throw new Error(`Failed to fetch pull requests: ${error.message}`);
+  }
+}
+
+export async function fetchRepoPR(owner, repo, number) {
+  const cacheKey = `pr:${owner}/${repo}:${number}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls/${number}`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Pull request not found');
+      }
+      throw new Error('Failed to fetch pull request');
+    }
+    
+    const pr = await response.json();
+    
+    const formattedPR = {
+      number: pr.number,
+      title: pr.title,
+      author: pr.user.login,
+      state: pr.state,
+      draft: pr.draft,
+      merged: pr.merged,
+      created_at: pr.created_at,
+      merged_at: pr.merged_at,
+      closed_at: pr.closed_at,
+      head_branch: pr.head.ref,
+      base_branch: pr.base.ref,
+      body: pr.body || '',
+      labels: pr.labels.map(label => label.name),
+      additions: pr.additions,
+      deletions: pr.deletions,
+      changed_files: pr.changed_files,
+      html_url: pr.html_url
+    };
+    
+    cache.set(cacheKey, formattedPR);
+    return formattedPR;
+  } catch (error) {
+    throw error;
+  }
+}
+
 export async function fetchRepoReleases(owner, repo, count = 10) {
   const cacheKey = `releases:${owner}/${repo}:${count}`;
   

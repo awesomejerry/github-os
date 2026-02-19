@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoPRs, fetchRepoPR, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -56,6 +56,7 @@ export const commands = {
   find: cmdFind,
   // Phase 4 commands
   issues: cmdIssues,
+  pr: cmdPr,
   contributors: cmdContributors,
   releases: cmdReleases,
   // Auth commands
@@ -137,7 +138,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'commit'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'pr', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'commit'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -228,6 +229,8 @@ function cmdHelp(terminal) {
     <span class="info">checkout &lt;branch&gt;</span> Switch to branch
     <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
     <span class="info">issues</span> [--closed|--all]   List repository issues (default: open)
+    <span class="info">pr</span> [--all]         List repository pull requests (default: open)
+    <span class="info">pr view</span> &lt;number&gt;  View pull request details
     <span class="info">releases</span> [count]  List repository releases (default: 10)
     <span class="info">contributors</span> [count]     List repository contributors (default: 20)
     <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
@@ -890,6 +893,97 @@ async function cmdIssues(terminal, githubUser, args) {
       terminal.print(`<span class="success">#${issue.number}</span> ${escapeHtml(issue.title)} <span class="info">@${issue.author}</span>${labels} <span class="info">(${relativeDate})</span>`);
     });
     terminal.print(`\n<span class="info">${issues.length} issue(s)</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdPr(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  
+  if (args[0] === 'view' && args[1]) {
+    const prNumber = parseInt(args[1]);
+    if (isNaN(prNumber)) {
+      terminal.print(`<span class="error">Invalid PR number: ${args[1]}</span>`);
+      return;
+    }
+    
+    terminal.showLoading();
+    try {
+      const pr = await fetchRepoPR(parsed.owner, parsed.repo, prNumber);
+      terminal.hideLoading();
+      
+      let stateDisplay = pr.state;
+      if (pr.merged) {
+        stateDisplay = 'merged';
+      }
+      const draftIndicator = pr.draft ? ' <span class="warning">[draft]</span>' : '';
+      
+      terminal.print('');
+      terminal.print(`<span class="success">#${pr.number}</span> ${escapeHtml(pr.title)}${draftIndicator}`);
+      terminal.print(`<span class="info">State:</span>    ${stateDisplay}`);
+      terminal.print(`<span class="info">Author:</span>   @${pr.author}`);
+      terminal.print(`<span class="info">Branch:</span>   ${pr.head_branch} → ${pr.base_branch}`);
+      
+      const relativeDate = formatRelativeDate(pr.created_at);
+      terminal.print(`<span class="info">Created:</span>  ${relativeDate}`);
+      
+      if (pr.changed_files > 0) {
+        terminal.print(`<span class="info">Changes:</span>  +${pr.additions} -${pr.deletions} in ${pr.changed_files} file(s)`);
+      }
+      
+      if (pr.labels.length > 0) {
+        terminal.print(`<span class="info">Labels:</span>   ${pr.labels.join(', ')}`);
+      }
+      
+      if (pr.body) {
+        const truncatedBody = pr.body.length > 500 ? pr.body.substring(0, 500) + '...' : pr.body;
+        terminal.print('');
+        terminal.print(`<span class="info">Description:</span>`);
+        terminal.print(truncatedBody.split('\n').map(line => `  ${escapeHtml(line)}`).join('\n'));
+      }
+      
+      terminal.print('');
+      terminal.print(`<span class="info">URL:</span> ${pr.html_url}`);
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+    return;
+  }
+  
+  const showAll = args.includes('--all');
+  const state = showAll ? 'all' : 'open';
+
+  terminal.showLoading();
+  try {
+    const prs = await fetchRepoPRs(parsed.owner, parsed.repo, state);
+    terminal.hideLoading();
+    
+    if (prs.length === 0) {
+      const stateDesc = showAll ? '' : 'open ';
+      terminal.print(`<span class="info">No ${stateDesc}pull requests found</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    prs.forEach(pr => {
+      const labels = pr.labels.length > 0 
+        ? ` <span class="info">[${pr.labels.join(', ')}]</span>` 
+        : '';
+      const draftIndicator = pr.draft ? ' <span class="warning">[draft]</span>' : '';
+      const relativeDate = formatRelativeDate(pr.created_at);
+      terminal.print(`<span class="success">#${pr.number}</span> ${escapeHtml(pr.title)}${draftIndicator} <span class="info">@${pr.author}</span>${labels} <span class="info">(${relativeDate})</span>`);
+    });
+    terminal.print(`\n<span class="info">${prs.length} pull request(s)</span>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
