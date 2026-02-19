@@ -122,7 +122,7 @@ export function closeModal(showSuccess = false) {
 async function saveFile() {
   if (!currentEditorState) return;
   
-  const { owner, repo, path, sha, terminal } = currentEditorState;
+  const { path, sha, terminal } = currentEditorState;
   const textarea = document.getElementById('editor-textarea');
   
   if (!textarea) return;
@@ -134,7 +134,7 @@ async function saveFile() {
     return;
   }
   
-  stageUpdate(owner, repo, path, content, sha);
+  stageUpdate(path, content, sha);
   
   closeModal(true);
   terminal.print(`<span class="success">Staged: modified</span> ${path}`);
