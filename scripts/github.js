@@ -909,26 +909,27 @@ export async function batchCommit(owner, repo, branch, changes, message) {
   
   const treeEntries = [];
   
+  // Creates - pass raw content, GitHub handles encoding
   for (const item of creates) {
-    const encodedContent = btoa(unescape(encodeURIComponent(item.content)));
     treeEntries.push({
       path: item.path,
       mode: '100644',
       type: 'blob',
-      content: encodedContent
+      content: item.content
     });
   }
   
+  // Updates - pass raw content, GitHub handles encoding
   for (const item of updates) {
-    const encodedContent = btoa(unescape(encodeURIComponent(item.content)));
     treeEntries.push({
       path: item.path,
       mode: '100644',
       type: 'blob',
-      content: encodedContent
+      content: item.content
     });
   }
   
+  // Deletes - set sha to null
   for (const item of deletes) {
     treeEntries.push({
       path: item.path,
