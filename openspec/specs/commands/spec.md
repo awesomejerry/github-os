@@ -234,6 +234,7 @@ The system SHALL display available commands and usage.
 - WHEN executing `help`
 - THEN all commands are listed with descriptions
 - AND commands are grouped by category
+- AND keyboard shortcuts are displayed
 - AND tips are displayed
 
 ---
