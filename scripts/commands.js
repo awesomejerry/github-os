@@ -243,11 +243,19 @@ function cmdHelp(terminal) {
   <span class="info">help</span>              Show this help message
   <span class="info">exit</span>              Exit terminal
 
-<span class="info">Tips:</span>
-  - Press <span class="success">Tab</span> to auto-complete paths
-  - Press <span class="success">↑/↓</span> to navigate command history
-  - Use <span class="success">grep -i</span> for case-insensitive search
-  - Use <span class="success">add</span> + <span class="success">commit</span> for batch commits
+ <span class="info">Tips:</span>
+   - Press <span class="success">Tab</span> to auto-complete paths
+   - Press <span class="success">↑/↓</span> to navigate command history
+   - Use <span class="success">grep -i</span> for case-insensitive search
+   - Use <span class="success">add</span> + <span class="success">commit</span> for batch commits
+
+ <span class="info">Keyboard Shortcuts:</span>
+   <span class="success">Ctrl+L</span>    Clear screen
+   <span class="success">Ctrl+U</span>    Clear input line
+   <span class="success">Ctrl+K</span>    Clear from cursor to end of line
+   <span class="success">Ctrl+A</span>    Move cursor to beginning of line
+   <span class="success">Ctrl+E</span>    Move cursor to end of line
+   <span class="success">Ctrl+R</span>    Search command history (reverse-i-search)
 `;
   terminal.print(help);
 }

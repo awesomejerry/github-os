@@ -35,7 +35,34 @@ export class Terminal {
    */
   setupEventListeners() {
     this.input.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter') {
+      if (this._searchMode) {
+        this._handleSearchMode(e);
+        return;
+      }
+
+      if (e.ctrlKey && e.key === 'l') {
+        e.preventDefault();
+        this.clear();
+      } else if (e.ctrlKey && e.key === 'u') {
+        e.preventDefault();
+        const pos = this.input.selectionStart;
+        this.input.value = this.input.value.substring(pos);
+        this.input.setSelectionRange(0, 0);
+      } else if (e.ctrlKey && e.key === 'k') {
+        e.preventDefault();
+        const pos = this.input.selectionStart;
+        this.input.value = this.input.value.substring(0, pos);
+      } else if (e.ctrlKey && e.key === 'a') {
+        e.preventDefault();
+        this.input.setSelectionRange(0, 0);
+      } else if (e.ctrlKey && e.key === 'e') {
+        e.preventDefault();
+        const len = this.input.value.length;
+        this.input.setSelectionRange(len, len);
+      } else if (e.ctrlKey && e.key === 'r') {
+        e.preventDefault();
+        this._startHistorySearch();
+      } else if (e.key === 'Enter') {
         // Skip if waiting for input (waitForInput handles this)
         if (this._waitingForInput) {
           return;
@@ -291,7 +318,11 @@ export class Terminal {
         const input = this.input.value.trim();
         this.input.value = '';
         this.promptEl.textContent = originalPrompt;
-        this._waitingForInput = false;
+    this._waitingForInput = false;
+    this._searchMode = false;
+    this._searchQuery = '';
+    this._searchMatches = [];
+    this._searchIndex = 0;
         this.input.removeEventListener('keydown', handler);
         await callback(input);
       }
@@ -319,5 +350,78 @@ export class Terminal {
    */
   getInput() {
     return this.input.value;
+  }
+
+  _startHistorySearch() {
+    if (this.commandHistory.length === 0) {
+      return;
+    }
+    this._searchMode = true;
+    this._searchQuery = '';
+    this._searchMatches = [...this.commandHistory].reverse();
+    this._searchIndex = 0;
+    this._originalPrompt = this.promptEl.textContent;
+    this.promptEl.textContent = '(reverse-i-search)`\': ';
+    this._searchInputValue = this.input.value;
+    this.input.value = '';
+  }
+
+  _handleSearchMode(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this._exitSearch(false);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      this._exitSearch(true);
+    } else if (e.ctrlKey && e.key === 'r') {
+      e.preventDefault();
+      if (this._searchMatches.length > 0) {
+        this._searchIndex = (this._searchIndex + 1) % this._searchMatches.length;
+        this._updateSearchDisplay();
+      }
+    } else if (e.key === 'Backspace') {
+      e.preventDefault();
+      this._searchQuery = this._searchQuery.slice(0, -1);
+      this._filterSearchMatches();
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      this._searchQuery += e.key;
+      this._filterSearchMatches();
+    }
+  }
+
+  _filterSearchMatches() {
+    const query = this._searchQuery.toLowerCase();
+    this._searchMatches = this.commandHistory
+      .slice()
+      .reverse()
+      .filter(cmd => cmd.toLowerCase().includes(query));
+    this._searchIndex = 0;
+    this._updateSearchDisplay();
+  }
+
+  _updateSearchDisplay() {
+    const query = this._searchQuery;
+    this.promptEl.textContent = `(reverse-i-search)\`${query}\': `;
+    if (this._searchMatches.length > 0) {
+      this.input.value = this._searchMatches[this._searchIndex];
+    } else {
+      this.input.value = '';
+    }
+  }
+
+  _exitSearch(applyMatch) {
+    this._searchMode = false;
+    this.promptEl.textContent = this._originalPrompt;
+    if (applyMatch && this._searchMatches.length > 0) {
+      this.input.value = this._searchMatches[this._searchIndex];
+    } else if (!applyMatch) {
+      this.input.value = this._searchInputValue || '';
+    }
+    this._searchQuery = '';
+    this._searchMatches = [];
+    this._searchIndex = 0;
+    const len = this.input.value.length;
+    this.input.setSelectionRange(len, len);
   }
 }
