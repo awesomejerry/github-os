@@ -61,6 +61,17 @@ The system SHALL allow clearing staged changes.
 - THEN the staging area is cleared
 - AND no changes are displayed in status
 
+#### Scenario: Unstage single file
+- GIVEN file "config.js" is staged
+- WHEN executing `unstage config.js`
+- THEN the file is removed from staging
+- AND an "Unstaged: config.js" message is displayed
+
+#### Scenario: Unstage non-staged file
+- GIVEN file "notstaged.js" is not staged
+- WHEN executing `unstage notstaged.js`
+- THEN an error "File not staged" is displayed
+
 ---
 
 ## Files

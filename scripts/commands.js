@@ -4,7 +4,7 @@ import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRep
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
-import { getStagedChanges, stageCreate, stageUpdate, stageDelete, clearStaging, hasStagedChanges } from './staging.js';
+import { getStagedChanges, stageCreate, stageUpdate, stageDelete, clearStaging, hasStagedChanges, unstage } from './staging.js';
 import { getCurrentTheme, setTheme, listThemes, THEMES } from './themes.js';
 
 let auth, session;
@@ -74,6 +74,7 @@ export const commands = {
   // Staging commands
   add: cmdAdd,
   diff: cmdDiff,
+  unstage: cmdUnstage,
   commit: cmdCommit,
   // PR commands
   pr: cmdPr,
@@ -142,7 +143,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'commit', 'pr'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -221,6 +222,8 @@ function cmdHelp(terminal) {
  <span class="info">Staging (Batch Commit)</span>
   <span class="info">add</span> &lt;file&gt;        Stage file changes for commit
   <span class="info">diff</span>              Show staged changes
+  <span class="info">unstage</span> &lt;file&gt;    Remove file from staging
+  <span class="info">unstage</span> --all     Clear all staged changes
   <span class="info">commit</span> -m "msg"   Commit staged changes
 
   <span class="info">Repository</span>
@@ -1584,6 +1587,29 @@ async function cmdDiff(terminal, githubUser) {
   }
 
   terminal.print(`<span class="info">${filesChanged} file(s) changed, ${totalInsertions} insertion(s), ${totalDeletions} deletion(s)</span>`);
+}
+
+async function cmdUnstage(terminal, githubUser, args) {
+  if (args.includes('--all')) {
+    clearStaging();
+    terminal.print(`<span class="success">All staged changes cleared</span>`);
+    return;
+  }
+
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: unstage &lt;file&gt;</span>`);
+    terminal.print(`<span class="info">Use 'unstage --all' to clear all staged changes</span>`);
+    return;
+  }
+
+  const filePath = args[0];
+  const result = unstage(filePath);
+  
+  if (result) {
+    terminal.print(`<span class="success">Unstaged:</span> ${filePath}`);
+  } else {
+    terminal.print(`<span class="error">File not staged: ${filePath}</span>`);
+  }
 }
 
 async function cmdCommit(terminal, githubUser, args) {

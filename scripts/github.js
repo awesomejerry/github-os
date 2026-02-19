@@ -25,6 +25,28 @@ function getHeaders() {
 }
 
 /**
+ * Handle API errors with user-friendly messages
+ */
+function handleApiError(error, operation = 'operation') {
+  // Network errors
+  if (error.name === 'TypeError' && (
+    error.message.includes('fetch') || 
+    error.message.includes('network') ||
+    error.message.includes('Failed to fetch')
+  )) {
+    return `Failed to connect to GitHub. Please check your internet connection.`;
+  }
+  
+  // Timeout errors
+  if (error.name === 'AbortError' || error.message.includes('timeout')) {
+    return `Request timed out. Please try again.`;
+  }
+  
+  // Other errors
+  return `Failed to ${operation}: ${error.message}`;
+}
+
+/**
  * Get cache (for tab completion)
  */
 export function getCache() {
@@ -1090,6 +1112,10 @@ export async function createPR(owner, repo, title, body, head, base) {
       state: pr.state
     };
   } catch (error) {
+    // Check for network errors
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Failed to connect to GitHub. Please check your internet connection.');
+    }
     throw error;
   }
 }
