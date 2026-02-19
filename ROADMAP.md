@@ -1,6 +1,6 @@
 # GitHub OS Roadmap
 
-> **Current Version:** v2.0.1  
+> **Current Version:** v2.2.0  
 > **Vision:** Make GitHub feel like a native filesystem you can navigate, explore, and interact with through a familiar terminal interface.
 
 ---
@@ -14,39 +14,84 @@
 
 ---
 
-## 📦 Phase 5: Authentication & Private Repos (v2.0)
+## 📦 Phase 5: Authentication & Private Repos (v2.0) ✅
 
 **Theme:** Unlock the full GitHub API
 
-### Features
+**Status:** Complete
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **OAuth Login** | GitHub OAuth flow for authentication | P0 |
-| **Private Repos** | Access your private repositories | P0 |
-| **Rate Limit Relief** | 5000 req/hour vs 60 req/hour | P0 |
-| **Session Persistence** | Stay logged in across visits | P1 |
-| **Multi-account** | Switch between GitHub accounts | P2 |
+### Features Implemented
 
-### New Commands
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **OAuth Login** | GitHub OAuth PKCE flow | ✅ |
+| **Private Repos** | Access your private repositories | ✅ |
+| **Rate Limit Relief** | 5000 req/hour vs 60 req/hour | ✅ |
+| **Session Persistence** | Stay logged in across visits | ✅ |
 
-```bash
-login           # Start OAuth flow
-logout          # End session
-status          # Show auth status & rate limits
-```
-
-### Technical Notes
-
-- Use GitHub OAuth App or GitHub App
-- Store token in localStorage (encrypted optional)
-- Handle token refresh/expiration gracefully
+### Commands
+- `login` - Start OAuth flow
+- `logout` - End session
+- `status` - Show auth status & rate limits
 
 ---
 
-## 📝 Phase 6: Write Operations (v2.1)
+## 📝 Phase 6: Write Operations (v2.1) ✅
 
 **Theme:** From read-only to read-write
+
+**Status:** Complete
+
+### Features Implemented
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **File Operations** | touch, mkdir, rm, mv, cp | ✅ |
+| **File Editor** | Built-in modal editor | ✅ |
+| **Branch Operations** | branch, checkout | ✅ |
+
+### Commands
+- `touch <file>` - Create new file
+- `mkdir <dir>` - Create directory
+- `rm <file>` - Delete file
+- `mv <src> <dest>` - Move/rename
+- `cp <src> <dest>` - Copy
+- `edit <file>` - Open in editor
+- `branch` - List branches
+- `branch -c <name>` - Create branch
+- `branch -d <name>` - Delete branch
+- `checkout <branch>` - Switch branch
+
+---
+
+## 🔄 Phase 6.5: Staging Workflow (v2.2) ✅
+
+**Theme:** Git-like staging area
+
+**Status:** Complete
+
+### Features Implemented
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Staging Area** | Stage changes before commit | ✅ |
+| **Batch Commit** | Commit multiple changes at once | ✅ |
+| **Status Enhanced** | Show staged changes | ✅ |
+
+### Commands
+- `add <file>` - Stage file changes
+- `unstage <file>` - Remove from staging
+- `diff` - Show staged diff
+- `commit -m "msg"` - Batch commit all staged changes
+- `status` - Show auth + staged changes
+
+### Workflow
+```bash
+touch file.txt     # Staged: new file
+edit config.js     # Staged: modified
+status             # Shows 2 staged changes
+commit -m "Add feature"  # Batch commit
+```
 
 ### Features
 

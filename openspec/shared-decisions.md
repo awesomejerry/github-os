@@ -1,6 +1,6 @@
-# Shared Decisions - GitHub OS v2.0.1 Auth
+# Shared Decisions - GitHub OS v2.2.0
 
-> 所有 auth 相關模組必須遵守此文件定義的規範
+> 所有模組必須遵守此文件定義的規範
 
 ---
 
@@ -298,20 +298,51 @@ Response: { access_token, token_type, scope }
 
 ---
 
-## 11. Testing Strategy
+## 11. Staging Workflow (v2.2)
+
+### Staging Area (scripts/staging.js)
+```javascript
+// localStorage key: github_os_staging
+{
+  creates: { "path": content },
+  updates: { "path": { content, sha } },
+  deletes: { "path": sha }
+}
+```
+
+### Commands
+- `touch`, `mkdir`, `rm`, `mv`, `cp`, `edit` → Stage changes
+- `status` → Show staged changes
+- `commit -m "msg"` → Batch commit all staged
+- `add <file>` → Stage file
+- `unstage <file>` → Remove from staging
+- `diff` → Show staged diff
+
+### Batch Commit (GitHub Git Data API)
+1. Get base commit SHA from branch ref
+2. Create blobs for each create/update
+3. Create new tree with all changes
+4. Create commit with message
+5. Update branch ref to new commit
+
+---
+
+## 12. Testing Strategy
 
 ### Unit Tests
 - `auth.js`: PKCE generation, token exchange, validation
 - `session.js`: localStorage operations, account switching
 - `github.js`: API calls, auth headers, cache clearing
+- `staging.js`: Stage operations, conflict detection
 
 ### E2E Tests
 - Login flow (mock OAuth)
 - Logout flow + prompt update
 - Private repo access
 - Rate limit display
+- Staging workflow
 
 ---
 
 *Last updated: 2026-02-18*
-*Version: v2.0.1*
+*Version: v2.2.0*
