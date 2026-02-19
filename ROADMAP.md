@@ -1,6 +1,6 @@
 # GitHub OS Roadmap
 
-> **Current Version:** v2.3.4  
+> **Current Version:** v2.3.5  
 > **Vision:** Make GitHub feel like a native filesystem you can navigate, explore, and interact with through a familiar terminal interface.
 
 ---
@@ -93,30 +93,112 @@ status             # Shows 2 staged changes
 commit -m "Add feature"  # Batch commit
 ```
 
-### Features
+---
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Create Files** | `touch` command to create new files | P0 |
-| **Edit Files** | Built-in editor or `edit` command | P0 |
-| **Delete Files** | `rm` command with confirmation | P0 |
-| **Create Directories** | `mkdir` command | P1 |
-| **Commit Changes** | `commit` command with message | P0 |
-| **Branch Operations** | Create/switch/delete branches | P1 |
+## 🔀 Phase 7: Pull Requests (v2.3) ✅
 
-### New Commands
+**Theme:** Full PR workflow
 
-```bash
-touch <file>              # Create new file
-edit <file>               # Open file in editor
-rm <file>                 # Delete file (with confirmation)
-mkdir <dir>               # Create directory
-mv <src> <dest>           # Move/rename files
-cp <src> <dest>           # Copy files
-commit -m "message"       # Commit staged changes
-branch -c <name>          # Create new branch
-checkout <branch>         # Switch branch
-```
+**Status:** Complete
+
+### Features Implemented
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **List PRs** | View open/all pull requests | ✅ |
+| **View PR** | Detailed PR information | ✅ |
+| **Create PR** | Interactive or direct creation | ✅ |
+| **Merge PR** | Merge with confirmation | ✅ |
+| **Close PR** | Close with confirmation | ✅ |
+
+### Commands
+- `pr` - List open PRs
+- `pr --all` - List all PRs (including closed)
+- `pr view <number>` - View PR details
+- `pr create` - Create PR interactively
+- `pr create -t "title" -b "body"` - Create PR directly
+- `pr merge <number>` - Merge PR (requires confirmation)
+- `pr close <number>` - Close PR (requires confirmation)
+
+---
+
+## 🎨 Phase 8: UX Polish (v2.3) ✅
+
+**Theme:** Better user experience
+
+**Status:** Complete
+
+### Features Implemented
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Theme System** | 6 color themes | ✅ |
+| **Keyboard Shortcuts** | Terminal-style shortcuts | ✅ |
+
+### Commands
+- `theme` - Show current theme
+- `theme list` - List available themes
+- `theme set <name>` - Set theme
+
+### Available Themes
+- `dark` (default)
+- `light`
+- `solarized-dark`
+- `solarized-light`
+- `monokai`
+- `gruvbox`
+
+### Keyboard Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+L` | Clear screen |
+| `Ctrl+U` | Clear input line |
+| `Ctrl+K` | Clear to end of line |
+| `Ctrl+A` | Go to line start |
+| `Ctrl+E` | Go to line end |
+| `↑/↓` | History navigation |
+
+---
+
+## 🧪 Test Coverage (v2.3.4)
+
+**Total Tests:** 248
+
+| Test Type | Files | Tests |
+|-----------|-------|-------|
+| Unit | 11 | 176 |
+| Integration | 3 | 26 |
+| E2E | 1 | 10 |
+| Browser | 2 | 36 |
+
+### Key Test Files
+- `tests/unit/themes.test.js` - Theme system (15 tests)
+- `tests/unit/pr.test.js` - PR operations (18 tests)
+- `tests/integration/theme-command.test.js` - Command signature (7 tests)
+- `tests/e2e/theme-command.test.js` - User flow simulation (10 tests)
+
+---
+
+## 🔮 Future Phases
+
+### Phase 9: Pull Request Review
+- `pr review <number>` - Review PR
+- `pr comment <number>` - Add comment
+- `pr approve <number>` - Approve PR
+
+### Phase 10: Issues
+- `issues` - List issues
+- `issues create` - Create issue
+- `issues close <number>` - Close issue
+
+### Phase 11: Advanced Features
+- `release` - Create releases
+- `wiki` - View/edit wiki
+- `actions` - View GitHub Actions
+
+---
+
+*Last updated: 2026-02-19*
 
 ### Technical Notes
 

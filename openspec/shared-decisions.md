@@ -1,4 +1,4 @@
-# Shared Decisions - GitHub OS v2.3.0
+# Shared Decisions - GitHub OS v2.3.5
 
 > 所有模組必須遵守此文件定義的規範
 
@@ -327,22 +327,124 @@ Response: { access_token, token_type, scope }
 
 ---
 
-## 12. Testing Strategy
+## 12. PR Operations (v2.3)
 
-### Unit Tests
-- `auth.js`: PKCE generation, token exchange, validation
-- `session.js`: localStorage operations, account switching
-- `github.js`: API calls, auth headers, cache clearing
-- `staging.js`: Stage operations, conflict detection
+### GitHub API Endpoints
+```javascript
+// List PRs
+GET /repos/{owner}/{repo}/pulls?state=open|all&per_page=30
 
-### E2E Tests
-- Login flow (mock OAuth)
-- Logout flow + prompt update
-- Private repo access
-- Rate limit display
-- Staging workflow
+// Get PR details
+GET /repos/{owner}/{repo}/pulls/{number}
+
+// Create PR
+POST /repos/{owner}/{repo}/pulls
+Body: { title, body, head, base }
+
+// Merge PR
+PUT /repos/{owner}/{repo}/pulls/{number}/merge
+Body: { commit_title, merge_method: "merge" }
+
+// Close PR
+PATCH /repos/{owner}/{repo}/pulls/{number}
+Body: { state: "closed" }
+```
+
+### Commands (scripts/commands.js)
+- `cmdPr` - PR dispatcher
+- `cmdPrView` - View PR details
+- `cmdPrCreate` - Create PR (interactive/direct)
+- `cmdPrMerge` - Merge PR (with confirmation)
+- `cmdPrClose` - Close PR (with confirmation)
+
+### Error Codes
+- 401: Authentication required
+- 403: Permission denied
+- 404: PR not found
+- 405: Not mergeable
+- 409: Merge conflict
+- 422: Validation failed
 
 ---
 
-*Last updated: 2026-02-18*
-*Version: v2.2.0*
+## 13. Theme System (v2.3)
+
+### Available Themes
+- `dark` (default)
+- `light`
+- `solarized-dark`
+- `solarized-light`
+- `monokai`
+- `gruvbox`
+
+### localStorage
+```javascript
+// key: github_os_theme
+{ name: "dark" }
+```
+
+### DOM Classes
+```html
+<html class="theme-dark">
+```
+
+---
+
+## 14. Keyboard Shortcuts (v2.3)
+
+| Shortcut | Action | Implementation |
+|----------|--------|----------------|
+| `Ctrl+L` | Clear screen | `terminal.clear()` |
+| `Ctrl+U` | Clear input line | `input.value = ''` |
+| `Ctrl+K` | Clear to end | Slice input value |
+| `Ctrl+A` | Go to start | `input.selectionStart = 0` |
+| `Ctrl+E` | Go to end | `input.selectionStart = length` |
+| `↑/↓` | History | Already implemented |
+
+---
+
+## 15. Command Signature Convention
+
+**All commands must follow this signature:**
+```javascript
+function cmdXxx(terminal, githubUser, args) { ... }
+```
+
+**Called by app.js as:**
+```javascript
+commands[cmd](this.terminal, this.githubUser, args, this);
+```
+
+**Example Bug (v2.3.1-v2.3.2):**
+```javascript
+// Wrong - caused "Unknown theme command: a"
+function cmdTheme(terminal, args) { ... }
+
+// Correct
+function cmdTheme(terminal, githubUser, args) { ... }
+```
+
+---
+
+## 16. Testing Strategy (v2.3.4)
+
+### Test Types
+| Type | Location | Purpose |
+|------|----------|---------|
+| Unit | `tests/unit/` | Module functionality |
+| Integration | `tests/integration/` | Command signatures |
+| E2E | `tests/e2e/` | User flow simulation |
+
+### Key Lessons
+
+1. **Unit tests ≠ Integration tests** - Module tests don't catch signature bugs
+2. **Integration tests for commands** - Verify how commands are called
+3. **E2E tests simulate users** - Test actual user input flow
+
+### Case Studies
+- See `memory/testing-principles.md` for documented cases
+
+---
+
+*Last updated: 2026-02-19*
+*Version: v2.3.4*
