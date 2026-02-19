@@ -268,6 +268,31 @@ export class Terminal {
   }
 
   /**
+   * Wait for user input (for confirmations)
+   * @param {function} callback - Called with the user's input
+   * @param {string} promptText - Optional custom prompt text
+   */
+  waitForInput(callback, promptText = '> ') {
+    const originalPrompt = this.promptEl.textContent;
+    this.promptEl.textContent = promptText;
+    this.input.value = '';
+    this.input.focus();
+    
+    const handler = async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const input = this.input.value.trim();
+        this.input.value = '';
+        this.promptEl.textContent = originalPrompt;
+        this.input.removeEventListener('keydown', handler);
+        await callback(input);
+      }
+    };
+    
+    this.input.addEventListener('keydown', handler);
+  }
+
+  /**
    * Focus input
    */
   focus() {
