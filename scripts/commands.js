@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -73,7 +73,9 @@ export const commands = {
   // Staging commands
   add: cmdAdd,
   diff: cmdDiff,
-  commit: cmdCommit
+  commit: cmdCommit,
+  // PR commands
+  pr: cmdPr
 };
 
 /**
@@ -137,7 +139,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'commit'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'commit', 'pr'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -218,25 +220,30 @@ function cmdHelp(terminal) {
   <span class="info">diff</span>              Show staged changes
   <span class="info">commit</span> -m "msg"   Commit staged changes
 
- <span class="info">Repository</span>
-    <span class="info">tree</span> [path]       Display directory tree
-    <span class="info">info</span>              Show repository details
-    <span class="info">log</span> [count]       Show commit history (default: 10)
-    <span class="info">branch</span>            List all branches (default marked with *)
-    <span class="info">branch -c &lt;name&gt;</span>  Create new branch (requires login)
-    <span class="info">branch -d &lt;name&gt;</span>  Delete branch (requires login)
-    <span class="info">checkout &lt;branch&gt;</span> Switch to branch
-    <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
-    <span class="info">issues</span> [--closed|--all]   List repository issues (default: open)
-    <span class="info">releases</span> [count]  List repository releases (default: 10)
-    <span class="info">contributors</span> [count]     List repository contributors (default: 20)
-    <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
-    <span class="info">whoami</span>            Show current GitHub user
+  <span class="info">Repository</span>
+     <span class="info">tree</span> [path]       Display directory tree
+     <span class="info">info</span>              Show repository details
+     <span class="info">log</span> [count]       Show commit history (default: 10)
+     <span class="info">branch</span>            List all branches (default marked with *)
+     <span class="info">branch -c &lt;name&gt;</span>  Create new branch (requires login)
+     <span class="info">branch -d &lt;name&gt;</span>  Delete branch (requires login)
+     <span class="info">checkout &lt;branch&gt;</span> Switch to branch
+     <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
+     <span class="info">issues</span> [--closed|--all]   List repository issues (default: open)
+     <span class="info">releases</span> [count]  List repository releases (default: 10)
+     <span class="info">contributors</span> [count]     List repository contributors (default: 20)
+     <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
+     <span class="info">whoami</span>            Show current GitHub user
 
- <span class="info">Authentication</span>
-    <span class="info">login</span>             Connect to GitHub with OAuth
-    <span class="info">logout</span>            Disconnect from GitHub
-    <span class="info">status</span>            Show authentication status and rate limits
+  <span class="info">Pull Requests (requires login)</span>
+   <span class="info">pr create</span> [-t "title"] [-b "body"]   Create PR (interactive if no flags)
+   <span class="info">pr merge</span> &lt;number&gt;                   Merge PR (with confirmation)
+   <span class="info">pr close</span> &lt;number&gt;                   Close PR (with confirmation)
+
+  <span class="info">Authentication</span>
+     <span class="info">login</span>             Connect to GitHub with OAuth
+     <span class="info">logout</span>            Disconnect from GitHub
+     <span class="info">status</span>            Show authentication status and rate limits
 
  <span class="info">Other</span>
   <span class="info">clear</span>             Clear terminal screen
@@ -1634,4 +1641,226 @@ async function cmdCommit(terminal, githubUser, args) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
+}
+
+async function cmdPr(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: pr &lt;command&gt;</span>`);
+    terminal.print(`<span class="info">Commands:</span>`);
+    terminal.print(`  pr create [-t "title"] [-b "body"]  Create a PR`);
+    terminal.print(`  pr merge &lt;number&gt;                  Merge a PR`);
+    terminal.print(`  pr close &lt;number&gt;                  Close a PR`);
+    return;
+  }
+
+  const subcommand = args[0].toLowerCase();
+  const subArgs = args.slice(1);
+
+  switch (subcommand) {
+    case 'create':
+      await cmdPrCreate(terminal, githubUser, subArgs);
+      break;
+    case 'merge':
+      await cmdPrMerge(terminal, githubUser, subArgs);
+      break;
+    case 'close':
+      await cmdPrClose(terminal, githubUser, subArgs);
+      break;
+    default:
+      terminal.print(`<span class="error">Unknown pr command: ${subcommand}</span>`);
+      terminal.print(`<span class="info">Available: create, merge, close</span>`);
+  }
+}
+
+async function cmdPrCreate(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  let title = null;
+  let body = null;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '-t' && i + 1 < args.length) {
+      title = args[i + 1];
+      i++;
+    } else if (args[i] === '-b' && i + 1 < args.length) {
+      body = args[i + 1];
+      i++;
+    }
+  }
+
+  if (!title) {
+    terminal.print(`<span class="info">PR title:</span>`);
+    terminal.waitForInput(async (titleInput) => {
+      if (!titleInput || titleInput.trim() === '') {
+        terminal.print(`<span class="error">PR title is required</span>`);
+        return;
+      }
+
+      if (!body) {
+        terminal.print(`<span class="info">PR body:</span>`);
+        terminal.waitForInput(async (bodyInput) => {
+          await performPRCreate(terminal, parsed, titleInput, bodyInput || '');
+        });
+      } else {
+        await performPRCreate(terminal, parsed, titleInput, body);
+      }
+    });
+  } else if (!body) {
+    terminal.print(`<span class="info">PR body:</span>`);
+    terminal.waitForInput(async (bodyInput) => {
+      await performPRCreate(terminal, parsed, title, bodyInput || '');
+    });
+  } else {
+    await performPRCreate(terminal, parsed, title, body);
+  }
+}
+
+async function performPRCreate(terminal, parsed, title, body) {
+  terminal.showLoading('Creating PR...');
+  
+  try {
+    const repoInfo = await getRepoInfo(parsed.owner, parsed.repo);
+    const currentBranch = terminal.getCurrentBranch ? terminal.getCurrentBranch() : null;
+    const head = currentBranch || repoInfo.default_branch;
+    const base = repoInfo.default_branch;
+
+    if (head === base) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Cannot create PR: head and base branches are the same ('${head}')</span>`);
+      terminal.print(`<span class="info">Checkout a different branch first using: checkout &lt;branch&gt;</span>`);
+      return;
+    }
+
+    const pr = await createPR(parsed.owner, parsed.repo, title, body, head, base);
+    
+    terminal.hideLoading();
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Created PR #${pr.number}</span>`);
+    terminal.print(escapeHtml(title));
+    terminal.print(`<a href="${pr.html_url}" target="_blank" class="directory">${pr.html_url}</a>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdPrMerge(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: pr merge &lt;number&gt;</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid PR number: ${args[0]}</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  terminal.print(`<span class="warning">This will merge PR #${number}</span>`);
+  terminal.print(`<span class="info">Type 'yes' to confirm:</span>`);
+  
+  terminal.waitForInput(async (confirmation) => {
+    if (confirmation.toLowerCase() !== 'yes') {
+      terminal.print(`<span class="info">Merge cancelled</span>`);
+      return;
+    }
+
+    terminal.showLoading(`Merging PR #${number}...`);
+    
+    try {
+      const pr = await fetchPR(parsed.owner, parsed.repo, number);
+      const commitTitle = `Merge pull request #${number} from ${pr.head}`;
+      
+      const result = await mergePR(parsed.owner, parsed.repo, number, commitTitle);
+      
+      terminal.hideLoading();
+      
+      terminal.print('');
+      terminal.print(`<span class="success">Merged PR #${number}</span>`);
+      terminal.print(`<span class="info">Commit: ${result.sha}</span>`);
+      terminal.print(`<a href="${pr.html_url}" target="_blank" class="directory">${pr.html_url}</a>`);
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  });
+}
+
+async function cmdPrClose(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: pr close &lt;number&gt;</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid PR number: ${args[0]}</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  terminal.print(`<span class="warning">This will close PR #${number}</span>`);
+  terminal.print(`<span class="info">Type 'yes' to confirm:</span>`);
+  
+  terminal.waitForInput(async (confirmation) => {
+    if (confirmation.toLowerCase() !== 'yes') {
+      terminal.print(`<span class="info">Close cancelled</span>`);
+      return;
+    }
+
+    terminal.showLoading(`Closing PR #${number}...`);
+    
+    try {
+      const pr = await closePR(parsed.owner, parsed.repo, number);
+      
+      terminal.hideLoading();
+      
+      terminal.print('');
+      terminal.print(`<span class="success">Closed PR #${number}</span>`);
+      terminal.print(`<a href="${pr.html_url}" target="_blank" class="directory">${pr.html_url}</a>`);
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  });
 }

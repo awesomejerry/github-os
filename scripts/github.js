@@ -959,4 +959,157 @@ export async function batchCommit(owner, repo, branch, changes, message) {
   };
 }
 
+export async function createPR(owner, repo, title, body, head, base) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          title,
+          body,
+          head,
+          base
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 422) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Validation failed');
+      }
+      throw new Error('Failed to create PR');
+    }
+    
+    const pr = await response.json();
+    
+    return {
+      number: pr.number,
+      title: pr.title,
+      html_url: pr.html_url,
+      state: pr.state
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function mergePR(owner, repo, number, commitTitle) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls/${number}/merge`,
+      {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          commit_title: commitTitle,
+          merge_method: 'merge'
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error(`PR #${number} not found`);
+      if (response.status === 405) {
+        throw new Error('PR is not mergeable. It may be closed or already merged');
+      }
+      if (response.status === 409) {
+        throw new Error('Merge failed: PR has conflicts that must be resolved');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to merge PR');
+    }
+    
+    const result = await response.json();
+    
+    return {
+      sha: result.sha,
+      merged: result.merged,
+      message: result.message
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function closePR(owner, repo, number) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls/${number}`,
+      {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          state: 'closed'
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error(`PR #${number} not found`);
+      throw new Error('Failed to close PR');
+    }
+    
+    const pr = await response.json();
+    
+    return {
+      number: pr.number,
+      state: pr.state,
+      html_url: pr.html_url
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchPR(owner, repo, number) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls/${number}`,
+      { headers: getHeaders() }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error(`PR #${number} not found`);
+      throw new Error('Failed to fetch PR');
+    }
+    
+    const pr = await response.json();
+    
+    return {
+      number: pr.number,
+      title: pr.title,
+      body: pr.body,
+      state: pr.state,
+      head: pr.head.ref,
+      base: pr.base.ref,
+      html_url: pr.html_url,
+      user: pr.user.login,
+      created_at: pr.created_at
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
 export { getHeaders };
