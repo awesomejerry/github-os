@@ -1,5 +1,8 @@
-## ADDED Requirements
+# file-operations Specification
 
+## Purpose
+TBD - created by archiving change file-operations. Update Purpose after archive.
+## Requirements
 ### Requirement: `touch` - Create New File
 The system SHALL allow authenticated users to create new files.
 
@@ -140,3 +143,4 @@ The system SHALL allow authenticated users to copy files.
 - **GIVEN** the user is not logged in
 - **WHEN** executing `cp <src> <dest>`
 - **THEN** an error "Authentication required" is displayed
+
