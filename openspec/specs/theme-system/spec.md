@@ -1,58 +1,83 @@
-# Theme System Spec
+# Theme System Specification
 
-## Overview
+## Purpose
 
 Color theme system for the terminal UI.
 
+---
+
 ## Requirements
 
-### 1. Available Themes
-- dark (default)
-- light
-- solarized-dark
-- solarized-light
-- monokai
-- gruvbox
+### Requirement: List available themes
+The system SHALL provide multiple color themes.
 
-### 2. Theme Structure
-```javascript
-{
-  name: string,
-  label: string
-}
-```
+#### Scenario: Show available themes
+- WHEN executing `theme list`
+- THEN all 6 themes are displayed
+- AND the current theme is marked with ✓
 
-### 3. Operations
-- `getCurrentTheme()` - Get current theme name
-- `setTheme(name)` - Set theme by name
-- `listThemes()` - List all available themes
-- `loadSavedTheme()` - Load from localStorage
+---
 
-### 4. Persistence
-- Save to localStorage (key: github_os_theme)
-- Load on app init
+### Requirement: Get current theme
+The system SHALL display the current theme.
 
-### 5. DOM Integration
-- Add/remove class on documentElement
-- Class format: theme-{name}
-- CSS custom properties for colors
+#### Scenario: Show current theme
+- GIVEN a theme is set
+- WHEN executing `theme`
+- THEN the current theme name and label are displayed
 
-### 6. Command
-```bash
-theme              # Show current theme
-theme list         # List all themes
-theme set <name>   # Set theme
-```
+#### Scenario: Default theme
+- GIVEN no theme has been set
+- WHEN the app loads
+- THEN "dark" is the default theme
 
-### 7. Command Signature
-```javascript
-function cmdTheme(terminal, githubUser, args)
-```
+---
+
+### Requirement: Set theme
+The system SHALL allow changing the theme.
+
+#### Scenario: Set valid theme
+- GIVEN the theme "light" exists
+- WHEN executing `theme set light`
+- THEN the theme is changed to "light"
+- AND the DOM class is updated to "theme-light"
+- AND the theme is saved to localStorage
+
+#### Scenario: Set invalid theme
+- GIVEN the theme "nonexistent" does not exist
+- WHEN executing `theme set nonexistent`
+- THEN an error "Unknown theme" is displayed
+- AND the available themes are listed
+
+---
+
+### Requirement: Persist theme selection
+The system SHALL persist theme selection.
+
+#### Scenario: Load saved theme
+- GIVEN a theme was previously saved
+- WHEN the app loads
+- THEN the saved theme is loaded
+- AND the DOM class is updated
+
+---
+
+### Requirement: Command signature
+The theme command SHALL use correct signature.
+
+#### Scenario: Command is called correctly
+- GIVEN the user types `theme`
+- WHEN the command is executed
+- THEN it receives (terminal, githubUser, args)
+- AND args is an empty array []
+- AND "Unknown theme command: a" is NOT displayed
+
+---
 
 ## Files
 
 - `scripts/themes.js` - Theme management
-- `scripts/commands.js` - cmdTheme command
+- `scripts/commands.js` - cmdTheme
 - `styles/themes/*.css` - Theme stylesheets
 
 ## Status

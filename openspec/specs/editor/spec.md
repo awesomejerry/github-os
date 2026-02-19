@@ -1,39 +1,70 @@
-# Editor Spec
+# Editor Specification
 
-## Overview
+## Purpose
 
 Built-in modal editor for editing files in the terminal.
 
+---
+
 ## Requirements
 
-### 1. Editor Modal
-- Overlay covers entire screen
-- Large textarea for content
-- File name in header
-- Save and Cancel buttons
+### Requirement: Open editor modal
+The system SHALL display a modal editor for editing files.
 
-### 2. Keyboard Shortcuts
-- ESC - Cancel and close
-- Ctrl+S - Save changes
+#### Scenario: Open file for editing
+- GIVEN the user is in a repository
+- AND the file "config.json" exists
+- WHEN executing `edit config.json`
+- THEN an editor modal is displayed
+- AND the file content is loaded
+- AND the filename is shown in the header
 
-### 3. File Loading
-- Fetch file content from GitHub API
-- Decode base64 content
-- Handle binary files (show warning)
+#### Scenario: File not found
+- GIVEN the user is in a repository
+- AND the file "nonexistent.txt" does not exist
+- WHEN executing `edit nonexistent.txt`
+- THEN an error "File not found" is displayed
 
-### 4. File Saving
-- Stage changes (v2.2+)
-- Or direct commit (v2.1)
-- Show commit SHA on success
+#### Scenario: Not in repository
+- GIVEN the user is at root (`/`)
+- WHEN executing `edit file.txt`
+- THEN an error "Not in a repository" is displayed
 
-### 5. Error Handling
-- Auth required message
-- File not found
-- Save failed
+---
+
+### Requirement: Save changes
+The system SHALL allow saving edited content.
+
+#### Scenario: Save file with Ctrl+S
+- GIVEN the editor is open with a file
+- WHEN pressing Ctrl+S
+- THEN the content is staged for commit
+- AND the modal is closed
+- AND a "Staged: modified" message is displayed
+
+#### Scenario: Cancel editing with ESC
+- GIVEN the editor is open with a file
+- AND the user has made changes
+- WHEN pressing ESC
+- THEN the modal is closed
+- AND no changes are staged
+
+---
+
+### Requirement: Authentication required
+The system SHALL require authentication for editing.
+
+#### Scenario: Not logged in
+- GIVEN the user is not logged in
+- WHEN executing `edit file.txt`
+- THEN an error "Login required" is displayed
+
+---
 
 ## Files
 
 - `scripts/editor.js` - Editor implementation
+- `scripts/commands.js` - cmdEdit
 - `styles/main.css` - Editor styles
 
 ## Status

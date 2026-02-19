@@ -1,37 +1,62 @@
-# Session Storage Spec
+# Session Storage Specification
 
-## Overview
+## Purpose
 
 Session management for persisting authentication state.
 
+---
+
 ## Requirements
 
-### 1. Session Structure
-```javascript
-{
-  username: string,
-  accessToken: string,
-  scope: string,
-  loginTime: timestamp
-}
-```
+### Requirement: Store session data
+The system SHALL store session data in localStorage.
 
-### 2. Storage Operations
-- `loadSession()` - Load session from localStorage
-- `saveSession(data)` - Save session to localStorage
-- `clearSession()` - Clear session data
-- `isAuthenticated()` - Check if valid session exists
-- `getAccessToken()` - Get current access token
+#### Scenario: Save session after login
+- GIVEN user successfully authenticates
+- WHEN the access token is received
+- THEN the session is saved to localStorage
+- AND the session includes username, accessToken, scope, loginTime
 
-### 3. Account Switching
-- Support multiple accounts (future)
-- Switch between accounts
-- Clear specific account session
+---
 
-### 4. Security
-- Never log access token
-- Clear on logout
-- Validate on load
+### Requirement: Load session
+The system SHALL load session from localStorage.
+
+#### Scenario: Load valid session
+- GIVEN a session exists in localStorage
+- WHEN the app loads
+- THEN the session is loaded
+- AND isAuthenticated() returns true
+- AND getAccessToken() returns the stored token
+
+#### Scenario: No session exists
+- GIVEN no session exists in localStorage
+- WHEN the app loads
+- THEN isAuthenticated() returns false
+- AND getAccessToken() returns null
+
+---
+
+### Requirement: Clear session
+The system SHALL clear session on logout.
+
+#### Scenario: Logout
+- GIVEN a session exists
+- WHEN executing `logout`
+- THEN the session is cleared from localStorage
+- AND isAuthenticated() returns false
+
+---
+
+### Requirement: Check authentication
+The system SHALL provide authentication status.
+
+#### Scenario: Check if authenticated
+- GIVEN a valid session exists
+- WHEN calling isAuthenticated()
+- THEN true is returned
+
+---
 
 ## Files
 

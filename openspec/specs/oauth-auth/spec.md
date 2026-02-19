@@ -1,31 +1,68 @@
-# OAuth Authentication Spec
+# OAuth Authentication Specification
 
-## Overview
+## Purpose
 
 GitHub OAuth PKCE flow for user authentication.
 
+---
+
 ## Requirements
 
-### 1. PKCE Code Generation
-- Generate cryptographically secure code_verifier (43-128 chars)
-- Generate code_challenge using S256 method
-- Store code_verifier in sessionStorage for callback
+### Requirement: Generate PKCE challenge
+The system SHALL generate PKCE code verifier and challenge.
 
-### 2. OAuth Flow
-- Redirect user to GitHub authorization URL
-- Include client_id, redirect_uri, scope, code_challenge
-- Handle callback with code parameter
-- Exchange code for access token via worker proxy
+#### Scenario: Generate code verifier
+- WHEN initiating login
+- THEN a cryptographically secure code_verifier is generated (43-128 chars)
+- AND a code_challenge is derived using S256 method
+- AND the code_verifier is stored in sessionStorage
 
-### 3. Token Storage
-- Store access_token in localStorage (encrypted)
-- Include token scope and expiration info
-- Clear token on logout
+---
 
-### 4. Token Validation
-- Validate token on app load
-- Check token scope matches required permissions
-- Handle expired/revoked tokens gracefully
+### Requirement: Redirect to GitHub
+The system SHALL redirect user to GitHub authorization.
+
+#### Scenario: Start OAuth flow
+- WHEN executing `login`
+- THEN user is redirected to GitHub authorization URL
+- AND the URL includes client_id, redirect_uri, scope, code_challenge
+
+---
+
+### Requirement: Handle OAuth callback
+The system SHALL exchange authorization code for access token.
+
+#### Scenario: Successful token exchange
+- GIVEN the user authorized the application
+- WHEN GitHub redirects back with authorization code
+- THEN the code is exchanged for access token via worker proxy
+- AND the access token is stored in localStorage
+- AND the user session is established
+
+#### Scenario: User denies authorization
+- GIVEN the user denied authorization
+- WHEN GitHub redirects back with error
+- THEN an error message is displayed
+- AND no session is created
+
+---
+
+### Requirement: Validate existing token
+The system SHALL validate stored tokens on app load.
+
+#### Scenario: Valid token
+- GIVEN a valid access token is stored
+- WHEN the app loads
+- THEN the token is validated against GitHub API
+- AND the user session is restored
+
+#### Scenario: Expired or revoked token
+- GIVEN an invalid access token is stored
+- WHEN the app loads
+- THEN the session is cleared
+- AND the user is prompted to login again
+
+---
 
 ## Files
 
