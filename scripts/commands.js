@@ -5,6 +5,7 @@ import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, valida
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
 import { getStagedChanges, stageCreate, stageUpdate, stageDelete, clearStaging, hasStagedChanges } from './staging.js';
+import { getCurrentTheme, setTheme, listThemes, THEMES } from './themes.js';
 
 let auth, session;
 
@@ -76,7 +77,9 @@ export const commands = {
   diff: cmdDiff,
   commit: cmdCommit,
   // PR commands
-  pr: cmdPr
+  pr: cmdPr,
+  // Theme commands
+  theme: cmdTheme
 };
 
 /**
@@ -140,7 +143,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'pr', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'commit'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'pr', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'commit', 'theme'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -249,6 +252,7 @@ function cmdHelp(terminal) {
  <span class="info">Other</span>
   <span class="info">clear</span>             Clear terminal screen
   <span class="info">help</span>              Show this help message
+  <span class="info">theme</span>             Manage themes (theme, theme list, theme set &lt;name&gt;)
   <span class="info">exit</span>              Exit terminal
 
 <span class="info">Tips:</span>
@@ -765,9 +769,56 @@ async function cmdGrep(terminal, githubUser, args) {
       terminal.print(`<span class="info">Or search on GitHub:</span>`);
       terminal.print(`  <a href="${searchUrl}" target="_blank" class="directory">${searchUrl}</a>`);
     } else {
-      terminal.print(`<span class="error">Error: ${error.message}</span>`);
-    }
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
+}
+
+function cmdTheme(terminal, args) {
+  if (args.length === 0) {
+    const current = getCurrentTheme();
+    const themeInfo = THEMES[current];
+    terminal.print(`<span class="info">Current theme:</span> <span class="success">${themeInfo.label}</span>`);
+    return;
+  }
+  
+  const subCommand = args[0].toLowerCase();
+  
+  if (subCommand === 'list') {
+    const themes = listThemes();
+    terminal.print('<span class="info">Available themes:</span>\n');
+    themes.forEach(theme => {
+      const marker = theme.current ? ' <span class="success">✓ (current)</span>' : '';
+      terminal.print(`  <span class="directory">${theme.name}</span> - ${theme.label}${marker}`);
+    });
+    return;
+  }
+  
+  if (subCommand === 'set') {
+    if (args.length < 2) {
+      terminal.print(`<span class="error">Usage: theme set &lt;name&gt;</span>`);
+      terminal.print(`<span class="info">Use 'theme list' to see available themes</span>`);
+      return;
+    }
+    
+    const themeName = args[1].toLowerCase();
+    const result = setTheme(themeName);
+    
+    if (result.success) {
+      const themeInfo = THEMES[themeName];
+      terminal.print(`<span class="success">Theme set to:</span> ${themeInfo.label}`);
+    } else {
+      terminal.print(`<span class="error">${result.error}</span>`);
+      terminal.print(`<span class="info">Available themes: ${Object.keys(THEMES).join(', ')}</span>`);
+    }
+    return;
+  }
+  
+  terminal.print(`<span class="error">Unknown theme command: ${subCommand}</span>`);
+  terminal.print(`<span class="info">Usage:</span>`);
+  terminal.print(`  <span class="info">theme</span>          Show current theme`);
+  terminal.print(`  <span class="info">theme list</span>     List available themes`);
+  terminal.print(`  <span class="info">theme set &lt;name&gt;</span> Set theme`);
+}
 }
 
 function escapeRegex(string) {

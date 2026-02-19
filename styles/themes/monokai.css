@@ -1,0 +1,92 @@
+.theme-monokai {
+  --bg-primary: #272822;
+  --bg-secondary: #3e3d32;
+  --bg-tertiary: #49483e;
+  --text-primary: #f8f8f2;
+  --text-secondary: #cfcfc2;
+  --text-muted: #75715e;
+  --border: #49483e;
+  --accent: #66d9ef;
+  --success: #a6e22e;
+  --error: #f92672;
+  --warning: #fd971f;
+}
+
+.theme-monokai body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-monokai .prompt { color: var(--accent); }
+.theme-monokai .command { color: var(--text-primary); }
+.theme-monokai .error { color: var(--error); }
+.theme-monokai .success { color: var(--success); }
+.theme-monokai .info { color: var(--text-secondary); }
+.theme-monokai .directory { color: var(--accent); }
+.theme-monokai .file { color: var(--text-primary); }
+.theme-monokai .symlink { color: var(--text-secondary); }
+.theme-monokai .welcome { color: var(--accent); }
+
+.theme-monokai #input-prompt {
+  color: var(--accent);
+}
+
+.theme-monokai #command-input {
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+}
+
+.theme-monokai pre {
+  background: var(--bg-secondary);
+}
+
+.theme-monokai .loading::after {
+  border-color: var(--accent);
+  border-top-color: transparent;
+}
+
+.theme-monokai .editor-overlay {
+  background: rgba(39, 40, 34, 0.9);
+}
+
+.theme-monokai .editor-modal {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.theme-monokai .editor-header {
+  background: var(--bg-primary);
+  border-color: var(--border);
+}
+
+.theme-monokai .editor-filename {
+  color: var(--accent);
+}
+
+.theme-monokai .editor-btn-save {
+  background: var(--success);
+  color: #272822;
+}
+
+.theme-monokai .editor-btn-save:hover:not(:disabled) {
+  background: #b5f23e;
+}
+
+.theme-monokai .editor-btn-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.theme-monokai .editor-btn-cancel:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.theme-monokai .editor-textarea {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-monokai .editor-textarea::placeholder {
+  color: var(--text-muted);
+}
