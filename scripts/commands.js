@@ -1868,8 +1868,8 @@ async function cmdPrClose(terminal, githubUser, args) {
   });
 }
 
-function cmdTheme(terminal, args) {
-  if (args.length === 0) {
+function cmdTheme(terminal, githubUser, args) {
+  if (!args || args.length === 0) {
     const current = getCurrentTheme();
     const themeInfo = THEMES[current];
     terminal.print(`<span class="info">Current theme:</span> <span class="success">${themeInfo.label}</span>`);
