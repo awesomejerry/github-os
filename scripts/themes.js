@@ -22,15 +22,27 @@ export function setTheme(themeName) {
     return { success: false, error: `Unknown theme: ${themeName}` };
   }
   
-  const html = document.documentElement;
-  
-  html.classList.remove(...Object.keys(THEMES).map(t => `theme-${t}`));
-  
-  html.classList.add(`theme-${themeName}`);
+  // Only update DOM if in browser environment
+  try {
+    if (typeof document !== 'undefined') {
+      const html = document.documentElement;
+      html.classList.remove(...Object.keys(THEMES).map(t => `theme-${t}`));
+      html.classList.add(`theme-${themeName}`);
+    }
+  } catch {
+    // DOM not available
+  }
   
   currentTheme = themeName;
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ name: themeName }));
+  // Only use localStorage if available
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ name: themeName }));
+    }
+  } catch {
+    // localStorage not available
+  }
   
   return { success: true, theme: themeName };
 }
@@ -44,12 +56,14 @@ export function listThemes() {
 
 export function loadSavedTheme() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const { name } = JSON.parse(saved);
-      if (THEMES[name]) {
-        setTheme(name);
-        return name;
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const { name } = JSON.parse(saved);
+        if (THEMES[name]) {
+          setTheme(name);
+          return name;
+        }
       }
     }
   } catch {
@@ -60,4 +74,5 @@ export function loadSavedTheme() {
   return DEFAULT_THEME;
 }
 
-loadSavedTheme();
+// Theme is loaded in app.js, not here
+// This prevents issues in test environments

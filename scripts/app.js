@@ -7,6 +7,7 @@ import { DEFAULT_GITHUB_USER } from './config.js';
 import { clearUserCache } from './github.js';
 import { loadSession, isAuthenticated } from './session.js';
 import { validateToken } from './auth.js';
+import { loadSavedTheme } from './themes.js';
 
 class GitHubOS {
   constructor() {
@@ -24,6 +25,9 @@ class GitHubOS {
    * Initialize the application
    */
   async init() {
+    // Load saved theme
+    loadSavedTheme();
+    
     // Check for auth callback success
     this.checkAuthCallback();
     
@@ -81,7 +85,7 @@ class GitHubOS {
     const statusText = loggedIn ? '(logged in)' : '(anonymous)';
     
     const welcomeText = `
-<span class="welcome">Welcome to GitHub OS v2.2.5</span>
+<span class="welcome">Welcome to GitHub OS v2.3.0</span>
 Connecting to GitHub user: <span class="success">${userDisplay}</span> <span class="info">${statusText}</span>
 
 Type <span class="info">'help'</span> for available commands.
