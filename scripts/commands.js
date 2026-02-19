@@ -4,7 +4,7 @@ import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRep
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
-import { getStagedChanges, stageUpdate, clearStaging, hasStagedChanges } from './staging.js';
+import { getStagedChanges, stageCreate, stageUpdate, stageDelete, clearStaging, hasStagedChanges } from './staging.js';
 
 let auth, session;
 
@@ -1006,45 +1006,65 @@ function cmdLogout(terminal) {
 async function cmdStatus(terminal) {
   const currentSession = session.loadSession();
   
-  if (!currentSession || !currentSession.username) {
+  // Show auth status
+  if (currentSession && currentSession.username) {
+    terminal.print(`<span class="info">Logged in as:</span> <span class="success">${currentSession.username}</span>`);
+    terminal.print(`<span class="info">Token scope:</span> ${currentSession.scope || 'N/A'}`);
+    
+    try {
+      const token = session.getAccessToken();
+      if (token) {
+        const response = await fetch('https://api.github.com/user', {
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const limit = response.headers.get('x-ratelimit-limit');
+        const remaining = response.headers.get('x-ratelimit-remaining');
+        const reset = response.headers.get('x-ratelimit-reset');
+        
+        if (limit && remaining && reset) {
+          const resetDate = new Date(parseInt(reset) * 1000);
+          const now = new Date();
+          const diffMs = resetDate - now;
+          const diffMins = Math.round(diffMs / 60000);
+          
+          const resetText = diffMins > 60 
+            ? `${Math.round(diffMins / 60)} hours` 
+            : `${diffMins} min`;
+          
+          terminal.print(`<span class="info">Rate limit:</span> ${remaining}/${limit} <span class="info">(resets in ${resetText})</span>`);
+        }
+      }
+    } catch (error) {
+      terminal.print(`<span class="info">Rate limit:</span> Unable to fetch`);
+    }
+  } else {
     terminal.print(`<span class="info">Not logged in. Use 'login' to connect.</span>`);
-    return;
   }
   
-  terminal.print(`<span class="info">Logged in as:</span> <span class="success">${currentSession.username}</span>`);
-  terminal.print(`<span class="info">Token scope:</span> ${currentSession.scope || 'N/A'}`);
-  
-  try {
-    const token = session.getAccessToken();
-    if (token) {
-      const response = await fetch('https://api.github.com/user', {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      const limit = response.headers.get('x-ratelimit-limit');
-      const remaining = response.headers.get('x-ratelimit-remaining');
-      const reset = response.headers.get('x-ratelimit-reset');
-      
-      if (limit && remaining && reset) {
-        const resetDate = new Date(parseInt(reset) * 1000);
-        const now = new Date();
-        const diffMs = resetDate - now;
-        const diffMins = Math.round(diffMs / 60000);
-        
-        const resetText = diffMins > 60 
-          ? `${Math.round(diffMins / 60)} hours` 
-          : `${diffMins} min`;
-        
-        terminal.print(`<span class="info">Rate limit:</span> ${remaining}/${limit} <span class="info">(resets in ${resetText})</span>`);
-      } else {
-        terminal.print(`<span class="info">Rate limit:</span> N/A`);
-      }
-    }
-  } catch (error) {
-    terminal.print(`<span class="info">Rate limit:</span> Unable to fetch`);
+  // Show staged changes
+  terminal.print('');
+  if (hasStagedChanges()) {
+    const changes = getStagedChanges();
+    terminal.print(`<span class="success">Staged changes:</span>`);
+    
+    changes.creates.forEach(c => {
+      terminal.print(`  <span class="success">new file:</span>   ${c.path}`);
+    });
+    changes.updates.forEach(u => {
+      terminal.print(`  <span class="warning">modified:</span>  ${u.path}`);
+    });
+    changes.deletes.forEach(d => {
+      terminal.print(`  <span class="error">deleted:</span>   ${d.path}`);
+    });
+    
+    const total = changes.creates.length + changes.updates.length + changes.deletes.length;
+    terminal.print(`<span class="info">${total} change(s) staged. Use 'commit -m "..."' to commit.</span>`);
+  } else {
+    terminal.print(`<span class="info">No staged changes.</span>`);
   }
 }
 
@@ -1066,36 +1086,14 @@ async function cmdTouch(terminal, githubUser, args) {
     return;
   }
 
-  const parsed = parsePath(githubUser, currentPath);
   const targetPath = resolvePath(currentPath, args[0]);
+  const parsed = parsePath(githubUser, currentPath);
   const targetParsed = parsePath(githubUser, targetPath);
-  const fileName = targetParsed.path.split('/').pop();
 
-  terminal.showLoading();
-  try {
-    const exists = await checkFileExists(targetParsed.owner, targetParsed.repo, targetParsed.path);
-    
-    if (exists) {
-      terminal.hideLoading();
-      terminal.print(`<span class="info">File already exists: ${args[0]}</span>`);
-      return;
-    }
-
-    const result = await createFile(
-      targetParsed.owner, 
-      targetParsed.repo, 
-      targetParsed.path, 
-      '', 
-      `Create ${fileName}`
-    );
-    
-    terminal.hideLoading();
-    terminal.print(`<span class="success">Created:</span> ${args[0]}`);
-    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
-  } catch (error) {
-    terminal.hideLoading();
-    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
-  }
+  // Stage the create (no API call)
+  stageCreate(targetParsed.path, '');
+  
+  terminal.print(`<span class="success">Staged:</span> new file ${args[0]}`);
 }
 
 async function cmdMkdir(terminal, githubUser, args) {
@@ -1118,34 +1116,13 @@ async function cmdMkdir(terminal, githubUser, args) {
 
   const parsed = parsePath(githubUser, currentPath);
   const dirName = args[0].replace(/\/$/, '');
-  const gitkeepPath = `${dirName}/.gitkeep`;
+  const fullDirPath = parsed.path ? `${parsed.path}/${dirName}` : dirName;
+  const gitkeepPath = `${fullDirPath}/.gitkeep`;
 
-  terminal.showLoading();
-  try {
-    const fullDirPath = parsed.path ? `${parsed.path}/${dirName}` : dirName;
-    const exists = await checkFileExists(parsed.owner, parsed.repo, `${fullDirPath}/.gitkeep`);
-    
-    if (exists) {
-      terminal.hideLoading();
-      terminal.print(`<span class="error">Directory already exists: ${dirName}</span>`);
-      return;
-    }
-
-    const result = await createFile(
-      parsed.owner, 
-      parsed.repo, 
-      fullDirPath + '/.gitkeep', 
-      '', 
-      `Create directory ${dirName}`
-    );
-    
-    terminal.hideLoading();
-    terminal.print(`<span class="success">Created directory:</span> ${dirName}/`);
-    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
-  } catch (error) {
-    terminal.hideLoading();
-    terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
-  }
+  // Stage the create (no API call)
+  stageCreate(gitkeepPath, '');
+  
+  terminal.print(`<span class="success">Staged:</span> new directory ${dirName}/`);
 }
 
 async function cmdRm(terminal, githubUser, args) {
@@ -1166,17 +1143,15 @@ async function cmdRm(terminal, githubUser, args) {
     return;
   }
 
-  const parsed = parsePath(githubUser, currentPath);
   const targetPath = resolvePath(currentPath, args[0]);
   const targetParsed = parsePath(githubUser, targetPath);
-  const fileName = targetParsed.path.split('/').pop();
 
   terminal.showLoading();
   try {
     const fileInfo = await getFile(targetParsed.owner, targetParsed.repo, targetParsed.path);
     terminal.hideLoading();
     
-    terminal.print(`<span class="warning">Warning: This will permanently delete "${args[0]}"</span>`);
+    terminal.print(`<span class="warning">Warning: This will delete "${args[0]}"</span>`);
     terminal.print(`<span class="info">Type 'yes' to confirm:</span>`);
     
     terminal.waitForInput(async (confirmation) => {
@@ -1185,23 +1160,10 @@ async function cmdRm(terminal, githubUser, args) {
         return;
       }
 
-      terminal.showLoading();
-      try {
-        const result = await deleteFile(
-          targetParsed.owner, 
-          targetParsed.repo, 
-          targetParsed.path, 
-          fileInfo.sha, 
-          `Delete ${fileName}`
-        );
-        
-        terminal.hideLoading();
-        terminal.print(`<span class="success">Deleted:</span> ${args[0]}`);
-        terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
-      } catch (error) {
-        terminal.hideLoading();
-        terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
-      }
+      // Stage the delete (no API call)
+      stageDelete(targetParsed.path, fileInfo.sha);
+      
+      terminal.print(`<span class="success">Staged:</span> deleted ${args[0]}`);
     });
   } catch (error) {
     terminal.hideLoading();
@@ -1227,44 +1189,21 @@ async function cmdMv(terminal, githubUser, args) {
     return;
   }
 
-  const parsed = parsePath(githubUser, currentPath);
   const srcPath = resolvePath(currentPath, args[0]);
   const destPath = resolvePath(currentPath, args[1]);
   const srcParsed = parsePath(githubUser, srcPath);
   const destParsed = parsePath(githubUser, destPath);
-  const srcFileName = srcParsed.path.split('/').pop();
-  const destFileName = destParsed.path.split('/').pop();
 
   terminal.showLoading();
   try {
     const srcFile = await getFile(srcParsed.owner, srcParsed.repo, srcParsed.path);
-    
-    const destExists = await checkFileExists(destParsed.owner, destParsed.repo, destParsed.path);
-    if (destExists) {
-      terminal.hideLoading();
-      terminal.print(`<span class="error">Destination already exists: ${args[1]}</span>`);
-      return;
-    }
-
-    await createFile(
-      destParsed.owner, 
-      destParsed.repo, 
-      destParsed.path, 
-      srcFile.content, 
-      `Move ${srcFileName} to ${destFileName}`
-    );
-
-    const result = await deleteFile(
-      srcParsed.owner, 
-      srcParsed.repo, 
-      srcParsed.path, 
-      srcFile.sha, 
-      `Move ${srcFileName} to ${destFileName}`
-    );
-    
     terminal.hideLoading();
-    terminal.print(`<span class="success">Moved:</span> ${args[0]} → ${args[1]}`);
-    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+    
+    // Stage delete + create (no API calls)
+    stageDelete(srcParsed.path, srcFile.sha);
+    stageCreate(destParsed.path, srcFile.content);
+    
+    terminal.print(`<span class="success">Staged:</span> moved ${args[0]} → ${args[1]}`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);
@@ -1289,36 +1228,20 @@ async function cmdCp(terminal, githubUser, args) {
     return;
   }
 
-  const parsed = parsePath(githubUser, currentPath);
   const srcPath = resolvePath(currentPath, args[0]);
   const destPath = resolvePath(currentPath, args[1]);
   const srcParsed = parsePath(githubUser, srcPath);
   const destParsed = parsePath(githubUser, destPath);
-  const srcFileName = srcParsed.path.split('/').pop();
-  const destFileName = destParsed.path.split('/').pop();
 
   terminal.showLoading();
   try {
     const srcFile = await getFile(srcParsed.owner, srcParsed.repo, srcParsed.path);
-    
-    const destExists = await checkFileExists(destParsed.owner, destParsed.repo, destParsed.path);
-    if (destExists) {
-      terminal.hideLoading();
-      terminal.print(`<span class="error">Destination already exists: ${args[1]}</span>`);
-      return;
-    }
-
-    const result = await createFile(
-      destParsed.owner, 
-      destParsed.repo, 
-      destParsed.path, 
-      srcFile.content, 
-      `Copy ${srcFileName} to ${destFileName}`
-    );
-    
     terminal.hideLoading();
-    terminal.print(`<span class="success">Copied:</span> ${args[0]} → ${args[1]}`);
-    terminal.print(`<span class="info">Commit: ${result.sha.substring(0, 7)}</span>`);
+    
+    // Stage create (no API call)
+    stageCreate(destParsed.path, srcFile.content);
+    
+    terminal.print(`<span class="success">Staged:</span> copied ${args[0]} → ${args[1]}`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${escapeHtml(error.message)}</span>`);

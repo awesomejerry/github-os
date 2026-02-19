@@ -1,6 +1,6 @@
 # GitHub OS Roadmap
 
-> **Current Version:** v2.2.2  
+> **Current Version:** v2.2.3  
 > **Vision:** Make GitHub feel like a native filesystem you can navigate, explore, and interact with through a familiar terminal interface.
 
 ---
