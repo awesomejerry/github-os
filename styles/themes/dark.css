@@ -1,0 +1,92 @@
+.theme-dark {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --text-primary: #c9d1d9;
+  --text-secondary: #8b949e;
+  --text-muted: #484f58;
+  --border: #30363d;
+  --accent: #58a6ff;
+  --success: #3fb950;
+  --error: #f85149;
+  --warning: #d29922;
+}
+
+.theme-dark body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-dark .prompt { color: var(--accent); }
+.theme-dark .command { color: var(--text-primary); }
+.theme-dark .error { color: var(--error); }
+.theme-dark .success { color: var(--success); }
+.theme-dark .info { color: var(--text-secondary); }
+.theme-dark .directory { color: var(--accent); }
+.theme-dark .file { color: var(--text-primary); }
+.theme-dark .symlink { color: var(--text-secondary); }
+.theme-dark .welcome { color: var(--accent); }
+
+.theme-dark #input-prompt {
+  color: var(--accent);
+}
+
+.theme-dark #command-input {
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+}
+
+.theme-dark pre {
+  background: var(--bg-secondary);
+}
+
+.theme-dark .loading::after {
+  border-color: var(--accent);
+  border-top-color: transparent;
+}
+
+.theme-dark .editor-overlay {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.theme-dark .editor-modal {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.theme-dark .editor-header {
+  background: var(--bg-primary);
+  border-color: var(--border);
+}
+
+.theme-dark .editor-filename {
+  color: var(--accent);
+}
+
+.theme-dark .editor-btn-save {
+  background: #238636;
+  color: #ffffff;
+}
+
+.theme-dark .editor-btn-save:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.theme-dark .editor-btn-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.theme-dark .editor-btn-cancel:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.theme-dark .editor-textarea {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-dark .editor-textarea::placeholder {
+  color: var(--text-muted);
+}

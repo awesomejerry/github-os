@@ -1,0 +1,92 @@
+.theme-solarized-dark {
+  --bg-primary: #002b36;
+  --bg-secondary: #073642;
+  --bg-tertiary: #094959;
+  --text-primary: #839496;
+  --text-secondary: #657b83;
+  --text-muted: #586e75;
+  --border: #094959;
+  --accent: #268bd2;
+  --success: #859900;
+  --error: #dc322f;
+  --warning: #b58900;
+}
+
+.theme-solarized-dark body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-solarized-dark .prompt { color: var(--accent); }
+.theme-solarized-dark .command { color: var(--text-primary); }
+.theme-solarized-dark .error { color: var(--error); }
+.theme-solarized-dark .success { color: var(--success); }
+.theme-solarized-dark .info { color: var(--text-secondary); }
+.theme-solarized-dark .directory { color: var(--accent); }
+.theme-solarized-dark .file { color: var(--text-primary); }
+.theme-solarized-dark .symlink { color: var(--text-secondary); }
+.theme-solarized-dark .welcome { color: var(--accent); }
+
+.theme-solarized-dark #input-prompt {
+  color: var(--accent);
+}
+
+.theme-solarized-dark #command-input {
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+}
+
+.theme-solarized-dark pre {
+  background: var(--bg-secondary);
+}
+
+.theme-solarized-dark .loading::after {
+  border-color: var(--accent);
+  border-top-color: transparent;
+}
+
+.theme-solarized-dark .editor-overlay {
+  background: rgba(0, 43, 54, 0.9);
+}
+
+.theme-solarized-dark .editor-modal {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.theme-solarized-dark .editor-header {
+  background: var(--bg-primary);
+  border-color: var(--border);
+}
+
+.theme-solarized-dark .editor-filename {
+  color: var(--accent);
+}
+
+.theme-solarized-dark .editor-btn-save {
+  background: var(--success);
+  color: #002b36;
+}
+
+.theme-solarized-dark .editor-btn-save:hover:not(:disabled) {
+  background: #8ba900;
+}
+
+.theme-solarized-dark .editor-btn-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.theme-solarized-dark .editor-btn-cancel:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.theme-solarized-dark .editor-textarea {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-solarized-dark .editor-textarea::placeholder {
+  color: var(--text-muted);
+}

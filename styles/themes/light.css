@@ -1,0 +1,92 @@
+.theme-light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --bg-tertiary: #eaeef2;
+  --text-primary: #24292f;
+  --text-secondary: #57606a;
+  --text-muted: #8c959f;
+  --border: #d0d7de;
+  --accent: #0969da;
+  --success: #1a7f37;
+  --error: #cf222e;
+  --warning: #9a6700;
+}
+
+.theme-light body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-light .prompt { color: var(--accent); }
+.theme-light .command { color: var(--text-primary); }
+.theme-light .error { color: var(--error); }
+.theme-light .success { color: var(--success); }
+.theme-light .info { color: var(--text-secondary); }
+.theme-light .directory { color: var(--accent); }
+.theme-light .file { color: var(--text-primary); }
+.theme-light .symlink { color: var(--text-secondary); }
+.theme-light .welcome { color: var(--accent); }
+
+.theme-light #input-prompt {
+  color: var(--accent);
+}
+
+.theme-light #command-input {
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+}
+
+.theme-light pre {
+  background: var(--bg-secondary);
+}
+
+.theme-light .loading::after {
+  border-color: var(--accent);
+  border-top-color: transparent;
+}
+
+.theme-light .editor-overlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.theme-light .editor-modal {
+  background: var(--bg-primary);
+  border-color: var(--border);
+}
+
+.theme-light .editor-header {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.theme-light .editor-filename {
+  color: var(--accent);
+}
+
+.theme-light .editor-btn-save {
+  background: #1f883d;
+  color: #ffffff;
+}
+
+.theme-light .editor-btn-save:hover:not(:disabled) {
+  background: #1a7f37;
+}
+
+.theme-light .editor-btn-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.theme-light .editor-btn-cancel:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.theme-light .editor-textarea {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-light .editor-textarea::placeholder {
+  color: var(--text-muted);
+}
