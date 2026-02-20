@@ -1,6 +1,6 @@
 # GitHub OS Roadmap
 
-> **Current Version:** v2.4.0  
+> **Current Version:** v2.4.1  
 > **Vision:** Make GitHub feel like a native filesystem you can navigate, explore, and interact with through a familiar terminal interface.
 
 ---
@@ -176,6 +176,61 @@ commit -m "Add feature"  # Batch commit
 - `tests/unit/pr.test.js` - PR operations (18 tests)
 - `tests/integration/theme-command.test.js` - Command signature (7 tests)
 - `tests/e2e/theme-command.test.js` - User flow simulation (10 tests)
+
+---
+
+## 🔍 Phase 10: Issues (v2.4.0) ✅
+
+**Theme:** Full issue management
+
+**Status:** Complete
+
+### Features Implemented
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **List Issues** | View open/all issues | ✅ |
+| **View Issue** | Detailed issue view | ✅ |
+| **Create Issue** | Create with title/body | ✅ |
+| **Close Issue** | Close issues | ✅ |
+| **Comment** | Add comments to issues | ✅ |
+
+### Commands
+- `issues` - List open issues
+- `issues --all` - List all issues
+- `issues view <number>` - View issue details
+- `issues create -t "title" -b "body"` - Create issue
+- `issues close <number>` - Close issue
+- `issues comment <number> "text"` - Add comment
+
+---
+
+## 🎨 Phase 8: UX Polish (v2.4.0) ✅
+
+**Theme:** Better user experience
+
+**Status:** Complete
+
+### Features Implemented
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Theme System** | 6 color themes | ✅ |
+| **Keyboard Shortcuts** | Terminal-style shortcuts | ✅ |
+| **Documentation** | User guide, command reference, API docs | ✅ |
+
+### Available Themes
+- `dark` (default)
+- `light`
+- `solarized-dark`
+- `solarized-light`
+- `monokai`
+- `gruvbox`
+
+### Documentation
+- `docs/USER_GUIDE.md` - Complete user guide
+- `docs/COMMANDS.md` - Full command reference
+- `docs/API.md` - GitHub API integration details
 
 ---
 
