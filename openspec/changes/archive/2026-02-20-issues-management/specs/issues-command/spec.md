@@ -1,11 +1,5 @@
-# issues-command Specification
+## MODIFIED Requirements
 
-## Purpose
-
-Provides the `issues` command for managing GitHub issues from the terminal.
-
----
-## Requirements
 ### Requirement: Issues Command
 The system SHALL provide an `issues` command to list repository issues.
 
@@ -75,4 +69,3 @@ The system SHALL provide an `issues` command to list repository issues.
 - **WHEN** executing `issues unknown`
 - **THEN** an error "Unknown issues command" is displayed
 - **AND** available subcommands are listed (view, create, close, reopen, comment)
-

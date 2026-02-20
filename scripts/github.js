@@ -1230,4 +1230,172 @@ export async function fetchPR(owner, repo, number) {
   }
 }
 
+export async function fetchIssue(owner, repo, number) {
+  const cacheKey = `issue:${owner}/${repo}:${number}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues/${number}`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Issue not found');
+      }
+      throw new Error('Failed to fetch issue');
+    }
+    
+    const issue = await response.json();
+    
+    if (issue.pull_request) {
+      throw new Error('Not an issue (this is a pull request)');
+    }
+    
+    const formattedIssue = {
+      number: issue.number,
+      title: issue.title,
+      body: issue.body || '',
+      state: issue.state,
+      author: issue.user.login,
+      labels: issue.labels.map(label => label.name),
+      created_at: issue.created_at,
+      html_url: issue.html_url,
+      comments: issue.comments
+    };
+    
+    cache.set(cacheKey, formattedIssue);
+    return formattedIssue;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function createIssue(owner, repo, title, body) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          title,
+          body
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 422) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Validation failed');
+      }
+      throw new Error('Failed to create issue');
+    }
+    
+    const issue = await response.json();
+    
+    return {
+      number: issue.number,
+      title: issue.title,
+      html_url: issue.html_url,
+      state: issue.state
+    };
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Failed to connect to GitHub. Please check your internet connection.');
+    }
+    throw error;
+  }
+}
+
+export async function updateIssue(owner, repo, number, state) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues/${number}`,
+      {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          state
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error(`Issue #${number} not found`);
+      throw new Error('Failed to update issue');
+    }
+    
+    const issue = await response.json();
+    
+    cache.delete(`issue:${owner}/${repo}:${number}`);
+    cache.delete(`issues:${owner}/${repo}:open`);
+    cache.delete(`issues:${owner}/${repo}:closed`);
+    cache.delete(`issues:${owner}/${repo}:all`);
+    
+    return {
+      number: issue.number,
+      title: issue.title,
+      state: issue.state,
+      html_url: issue.html_url
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function addIssueComment(owner, repo, number, body) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues/${number}/comments`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          body
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error(`Issue #${number} not found`);
+      throw new Error('Failed to add comment');
+    }
+    
+    const comment = await response.json();
+    
+    return {
+      id: comment.id,
+      html_url: comment.html_url
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
 export { getHeaders };

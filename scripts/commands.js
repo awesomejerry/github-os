@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -236,6 +236,11 @@ function cmdHelp(terminal) {
      <span class="info">checkout &lt;branch&gt;</span> Switch to branch
      <span class="info">find</span> &lt;pattern&gt;    Find files by name pattern
      <span class="info">issues</span> [--closed|--all]   List repository issues (default: open)
+     <span class="info">issues view</span> &lt;number&gt;         View issue details
+     <span class="info">issues create</span> [-t "title"] [-b "body"]  Create issue (interactive if no flags)
+     <span class="info">issues close</span> &lt;number&gt;        Close issue (with confirmation)
+     <span class="info">issues reopen</span> &lt;number&gt;      Reopen issue (with confirmation)
+     <span class="info">issues comment</span> &lt;number&gt; "text"  Add comment to issue
      <span class="info">releases</span> [count]  List repository releases (default: 10)
      <span class="info">contributors</span> [count]     List repository contributors (default: 20)
      <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
@@ -879,6 +884,37 @@ async function cmdIssues(terminal, githubUser, args) {
 
   const parsed = parsePath(githubUser, currentPath);
   
+  if (args.length === 0 || args[0].startsWith('--')) {
+    await listIssues(terminal, parsed, args);
+    return;
+  }
+
+  const subcommand = args[0].toLowerCase();
+  const subArgs = args.slice(1);
+
+  switch (subcommand) {
+    case 'view':
+      await cmdIssuesView(terminal, parsed, subArgs);
+      break;
+    case 'create':
+      await cmdIssuesCreate(terminal, parsed, subArgs);
+      break;
+    case 'close':
+      await cmdIssuesClose(terminal, parsed, subArgs);
+      break;
+    case 'reopen':
+      await cmdIssuesReopen(terminal, parsed, subArgs);
+      break;
+    case 'comment':
+      await cmdIssuesComment(terminal, parsed, subArgs);
+      break;
+    default:
+      terminal.print(`<span class="error">Unknown issues command: ${subcommand}</span>`);
+      terminal.print(`<span class="info">Available commands: view, create, close, reopen, comment</span>`);
+  }
+}
+
+async function listIssues(terminal, parsed, args) {
   const showAll = args.includes('--all');
   const showClosed = args.includes('--closed');
   const state = showAll ? 'all' : (showClosed ? 'closed' : 'open');
@@ -903,6 +939,238 @@ async function cmdIssues(terminal, githubUser, args) {
       terminal.print(`<span class="success">#${issue.number}</span> ${escapeHtml(issue.title)} <span class="info">@${issue.author}</span>${labels} <span class="info">(${relativeDate})</span>`);
     });
     terminal.print(`\n<span class="info">${issues.length} issue(s)</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdIssuesView(terminal, parsed, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: issues view &lt;number&gt;</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid issue number: ${args[0]}</span>`);
+    return;
+  }
+
+  terminal.showLoading();
+  try {
+    const issue = await fetchIssue(parsed.owner, parsed.repo, number);
+    terminal.hideLoading();
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Issue #${issue.number}</span> ${escapeHtml(issue.title)}`);
+    terminal.print(`<span class="info">Author:</span> @${issue.author}`);
+    terminal.print(`<span class="info">State:</span> ${issue.state}`);
+    terminal.print(`<span class="info">Created:</span> ${formatRelativeDate(issue.created_at)}`);
+    if (issue.labels.length > 0) {
+      terminal.print(`<span class="info">Labels:</span> ${issue.labels.join(', ')}`);
+    }
+    if (issue.comments > 0) {
+      terminal.print(`<span class="info">Comments:</span> ${issue.comments}`);
+    }
+    terminal.print('');
+    if (issue.body) {
+      terminal.print(`<span class="info">Description:</span>`);
+      terminal.print(escapeHtml(issue.body));
+    } else {
+      terminal.print(`<span class="info">No description</span>`);
+    }
+    terminal.print('');
+    terminal.print(`<a href="${issue.html_url}" target="_blank" class="directory">${issue.html_url}</a>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdIssuesCreate(terminal, parsed, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  let title = null;
+  let body = null;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '-t' && i + 1 < args.length) {
+      title = args[i + 1];
+      i++;
+    } else if (args[i] === '-b' && i + 1 < args.length) {
+      body = args[i + 1];
+      i++;
+    }
+  }
+
+  if (!title) {
+    terminal.print(`<span class="info">Issue title:</span>`);
+    terminal.waitForInput(async (titleInput) => {
+      if (!titleInput || titleInput.trim() === '') {
+        terminal.print(`<span class="error">Issue title is required</span>`);
+        return;
+      }
+
+      if (!body) {
+        terminal.print(`<span class="info">Issue body (optional, press Enter to skip):</span>`);
+        terminal.waitForInput(async (bodyInput) => {
+          await performIssueCreate(terminal, parsed, titleInput, bodyInput || '');
+        });
+      } else {
+        await performIssueCreate(terminal, parsed, titleInput, body);
+      }
+    });
+  } else if (!body) {
+    terminal.print(`<span class="info">Issue body (optional, press Enter to skip):</span>`);
+    terminal.waitForInput(async (bodyInput) => {
+      await performIssueCreate(terminal, parsed, title, bodyInput || '');
+    });
+  } else {
+    await performIssueCreate(terminal, parsed, title, body);
+  }
+}
+
+async function performIssueCreate(terminal, parsed, title, body) {
+  terminal.showLoading('Creating issue...');
+  
+  try {
+    const issue = await createIssue(parsed.owner, parsed.repo, title, body);
+    
+    terminal.hideLoading();
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Created issue #${issue.number}</span>`);
+    terminal.print(escapeHtml(title));
+    terminal.print(`<a href="${issue.html_url}" target="_blank" class="directory">${issue.html_url}</a>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdIssuesClose(terminal, parsed, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: issues close &lt;number&gt;</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid issue number: ${args[0]}</span>`);
+    return;
+  }
+
+  terminal.print(`<span class="warning">This will close issue #${number}</span>`);
+  terminal.print(`<span class="info">Type 'yes' to confirm:</span>`);
+  
+  terminal.waitForInput(async (confirmation) => {
+    if (confirmation.toLowerCase() !== 'yes') {
+      terminal.print(`<span class="info">Close cancelled</span>`);
+      return;
+    }
+
+    terminal.showLoading(`Closing issue #${number}...`);
+    
+    try {
+      const issue = await updateIssue(parsed.owner, parsed.repo, number, 'closed');
+      
+      terminal.hideLoading();
+      
+      terminal.print('');
+      terminal.print(`<span class="success">Closed issue #${issue.number}</span>`);
+      terminal.print(`<a href="${issue.html_url}" target="_blank" class="directory">${issue.html_url}</a>`);
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  });
+}
+
+async function cmdIssuesReopen(terminal, parsed, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: issues reopen &lt;number&gt;</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid issue number: ${args[0]}</span>`);
+    return;
+  }
+
+  terminal.print(`<span class="warning">This will reopen issue #${number}</span>`);
+  terminal.print(`<span class="info">Type 'yes' to confirm:</span>`);
+  
+  terminal.waitForInput(async (confirmation) => {
+    if (confirmation.toLowerCase() !== 'yes') {
+      terminal.print(`<span class="info">Reopen cancelled</span>`);
+      return;
+    }
+
+    terminal.showLoading(`Reopening issue #${number}...`);
+    
+    try {
+      const issue = await updateIssue(parsed.owner, parsed.repo, number, 'open');
+      
+      terminal.hideLoading();
+      
+      terminal.print('');
+      terminal.print(`<span class="success">Reopened issue #${issue.number}</span>`);
+      terminal.print(`<a href="${issue.html_url}" target="_blank" class="directory">${issue.html_url}</a>`);
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  });
+}
+
+async function cmdIssuesComment(terminal, parsed, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length < 2) {
+    terminal.print(`<span class="error">Usage: issues comment &lt;number&gt; "text"</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid issue number: ${args[0]}</span>`);
+    return;
+  }
+
+  const commentText = args.slice(1).join(' ');
+  if (!commentText || commentText.trim() === '') {
+    terminal.print(`<span class="error">Comment text is required</span>`);
+    return;
+  }
+
+  terminal.showLoading(`Adding comment to issue #${number}...`);
+  
+  try {
+    const result = await addIssueComment(parsed.owner, parsed.repo, number, commentText);
+    
+    terminal.hideLoading();
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Comment added to issue #${number}</span>`);
+    terminal.print(`<a href="${result.html_url}" target="_blank" class="directory">${result.html_url}</a>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
