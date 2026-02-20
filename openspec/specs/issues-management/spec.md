@@ -1,145 +1,120 @@
-# issues-management Specification
+# Issues Management Specification
 
 ## Purpose
 
-Provides comprehensive issue management capabilities including view, create, close, reopen, and comment operations.
+Full issue management including creating, viewing, closing, and commenting on issues.
 
 ---
+
 ## Requirements
 
-### Requirement: Issue View Command
-The system SHALL provide an `issues view` subcommand to display issue details.
+### Requirement: List issues
+The system SHALL allow listing repository issues.
 
-#### Scenario: View issue details
-- **GIVEN** the user is in a repository directory
-- **WHEN** executing `issues view <number>`
-- **THEN** issue details are displayed including: number, title, author, state, body, labels, created date, and URL
+#### Scenario: List open issues
+- GIVEN the user is in a repository
+- WHEN executing `issues`
+- THEN all open issues are displayed
+- AND each issue shows number, title, author, and status
+
+#### Scenario: List all issues including closed
+- GIVEN the user is in a repository
+- WHEN executing `issues --all`
+- THEN all issues (open and closed) are displayed
+
+---
+
+### Requirement: View issue details
+The system SHALL allow viewing detailed issue information.
+
+#### Scenario: View specific issue
+- GIVEN issue #42 exists in the repository
+- WHEN executing `issues view 42`
+- THEN the issue details are displayed
+- AND the title, body, author, status, and labels are shown
+- AND the creation date is shown
 
 #### Scenario: Issue not found
-- **GIVEN** the user is in a repository directory
-- **WHEN** executing `issues view <number>` with invalid number
-- **THEN** an error "Issue not found" is displayed
-
-#### Scenario: Not in a repository
-- **GIVEN** the user is at root directory `/`
-- **WHEN** executing `issues view <number>`
-- **THEN** an error "Not in a repository" is displayed
+- GIVEN issue #999 does not exist
+- WHEN executing `issues view 999`
+- THEN an error "Issue not found" is displayed
 
 ---
 
-### Requirement: Issue Create Command
-The system SHALL provide an `issues create` subcommand to create new issues.
+### Requirement: Create issue
+The system SHALL allow creating new issues.
 
 #### Scenario: Create issue with flags
-- **GIVEN** the user is authenticated
-- **AND** the user is in a repository directory
-- **WHEN** executing `issues create -t "title" -b "body"`
-- **THEN** a new issue is created
-- **AND** the issue number and URL are displayed
+- GIVEN the user is authenticated
+- AND the user is in a repository
+- WHEN executing `issues create -t "Bug title" -b "Bug description"`
+- THEN a new issue is created
+- AND the issue number and URL are displayed
 
-#### Scenario: Create issue interactive mode
-- **GIVEN** the user is authenticated
-- **AND** the user is in a repository directory
-- **WHEN** executing `issues create` without flags
-- **THEN** the user is prompted for title
-- **AND** then prompted for body
-- **AND** a new issue is created
+#### Scenario: Create issue without title
+- GIVEN the user is authenticated
+- WHEN executing `issues create -b "description only"`
+- THEN an error "Issue title required" is displayed
 
-#### Scenario: Create requires authentication
-- **GIVEN** the user is not authenticated
-- **WHEN** executing `issues create`
-- **THEN** an error "Authentication required" is displayed
-
-#### Scenario: Title is required
-- **GIVEN** the user is authenticated
-- **WHEN** creating an issue with empty title
-- **THEN** an error "Issue title is required" is displayed
+#### Scenario: Create issue without auth
+- GIVEN the user is not authenticated
+- WHEN executing `issues create -t "Title" -b "Body"`
+- THEN an error "Authentication required" is displayed
 
 ---
 
-### Requirement: Issue Close Command
-The system SHALL provide an `issues close` subcommand to close open issues.
+### Requirement: Close issue
+The system SHALL allow closing issues.
 
-#### Scenario: Close issue with confirmation
-- **GIVEN** the user is authenticated
-- **AND** the user is in a repository directory
-- **WHEN** executing `issues close <number>`
-- **THEN** a confirmation prompt is shown
-- **AND** typing "yes" closes the issue
+#### Scenario: Close open issue
+- GIVEN the user is authenticated
+- AND issue #42 is open
+- WHEN executing `issues close 42`
+- THEN the issue is closed
+- AND a success message is displayed
 
-#### Scenario: Close cancelled
-- **GIVEN** the user is authenticated
-- **WHEN** executing `issues close <number>` and typing anything other than "yes"
-- **THEN** the operation is cancelled
-
-#### Scenario: Close requires authentication
-- **GIVEN** the user is not authenticated
-- **WHEN** executing `issues close <number>`
-- **THEN** an error "Authentication required" is displayed
+#### Scenario: Close already closed issue
+- GIVEN issue #42 is already closed
+- WHEN executing `issues close 42`
+- THEN the issue state remains closed
+- AND a message indicates it was already closed
 
 ---
 
-### Requirement: Issue Reopen Command
-The system SHALL provide an `issues reopen` subcommand to reopen closed issues.
+### Requirement: Reopen issue
+The system SHALL allow reopening closed issues.
 
-#### Scenario: Reopen issue with confirmation
-- **GIVEN** the user is authenticated
-- **AND** the user is in a repository directory
-- **WHEN** executing `issues reopen <number>`
-- **THEN** a confirmation prompt is shown
-- **AND** typing "yes" reopens the issue
-
-#### Scenario: Reopen requires authentication
-- **GIVEN** the user is not authenticated
-- **WHEN** executing `issues reopen <number>`
-- **THEN** an error "Authentication required" is displayed
+#### Scenario: Reopen closed issue
+- GIVEN the user is authenticated
+- AND issue #42 is closed
+- WHEN executing `issues reopen 42`
+- THEN the issue is reopened
+- AND a success message is displayed
 
 ---
 
-### Requirement: Issue Comment Command
-The system SHALL provide an `issues comment` subcommand to add comments to issues.
+### Requirement: Add comment to issue
+The system SHALL allow adding comments to issues.
 
 #### Scenario: Add comment to issue
-- **GIVEN** the user is authenticated
-- **AND** the user is in a repository directory
-- **WHEN** executing `issues comment <number> "comment text"`
-- **THEN** the comment is added to the issue
-- **AND** a success message is displayed
+- GIVEN the user is authenticated
+- AND issue #42 exists
+- WHEN executing `issues comment 42 "This is my comment"`
+- THEN the comment is added
+- AND a success message is displayed
 
-#### Scenario: Comment requires authentication
-- **GIVEN** the user is not authenticated
-- **WHEN** executing `issues comment <number> "text"`
-- **THEN** an error "Authentication required" is displayed
-
-#### Scenario: Comment text required
-- **GIVEN** the user is authenticated
-- **WHEN** executing `issues comment <number>` without text
-- **THEN** an error "Comment text is required" is displayed
+#### Scenario: Comment on non-existent issue
+- GIVEN issue #999 does not exist
+- WHEN executing `issues comment 999 "comment"`
+- THEN an error "Issue not found" is displayed
 
 ---
 
-### Requirement: Issue API Functions
-The system SHALL provide GitHub API functions for issue operations.
+## Files
 
-#### Scenario: fetchIssue function
-- **GIVEN** valid owner, repo, and issue number
-- **WHEN** calling fetchIssue(owner, repo, number)
-- **THEN** issue data is returned including: number, title, body, state, author, labels, created_at, html_url
+- `scripts/github.js` - fetchIssues, fetchIssue, createIssue, updateIssue, addIssueComment
+- `scripts/commands.js` - cmdIssues, cmdIssuesView, cmdIssuesCreate, cmdIssuesClose, cmdIssuesComment
 
-#### Scenario: createIssue function
-- **GIVEN** valid authentication and parameters
-- **WHEN** calling createIssue(owner, repo, title, body)
-- **THEN** a POST request is sent to `/repos/{owner}/{repo}/issues`
-- **AND** the new issue number and URL are returned
+## Status
 
-#### Scenario: updateIssue function
-- **GIVEN** valid authentication and parameters
-- **WHEN** calling updateIssue(owner, repo, number, state)
-- **THEN** a PATCH request is sent to `/repos/{owner}/{repo}/issues/{number}`
-- **AND** the updated issue data is returned
-
-#### Scenario: addIssueComment function
-- **GIVEN** valid authentication and parameters
-- **WHEN** calling addIssueComment(owner, repo, number, body)
-- **THEN** a POST request is sent to `/repos/{owner}/{repo}/issues/{number}/comments`
-- **AND** the comment URL is returned
+✅ Implemented in v2.4.0
