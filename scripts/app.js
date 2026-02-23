@@ -15,12 +15,17 @@ class GitHubOS {
     this.connectedUser = null;
     this.terminal = new Terminal();
     this.githubUser = detectGitHubUser(DEFAULT_GITHUB_USER);
+    this.currentOrg = null;
     
     // Set up command handler
     this.terminal.onCommand = this.executeCommand.bind(this);
     
     // Set up tab completion
     this.terminal.onTabComplete = this.handleTabComplete.bind(this);
+    
+    // Set up org context methods on terminal
+    this.terminal.getCurrentOrg = () => this.currentOrg;
+    this.terminal.setCurrentOrg = (org) => { this.currentOrg = org; };
   }
 
   /**
@@ -229,6 +234,20 @@ Type <span class="info">'login'</span> to authenticate with GitHub.
    */
   getBrowsingUser() {
     return this.connectedUser || this.githubUser;
+  }
+
+  /**
+   * Set current organization context
+   */
+  setCurrentOrg(org) {
+    this.currentOrg = org;
+  }
+
+  /**
+   * Get current organization context
+   */
+  getCurrentOrg() {
+    return this.currentOrg;
   }
 }
 

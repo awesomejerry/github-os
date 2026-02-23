@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment, fetchUserOrgs, fetchOrgInfo, fetchOrgRepos, fetchOrgTeams, fetchTeamRepos, fetchTeamMembers } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -79,7 +79,11 @@ export const commands = {
   // PR commands
   pr: cmdPr,
   // Theme commands
-  theme: cmdTheme
+  theme: cmdTheme,
+  // Organization & Teams commands (Phase 9)
+  org: cmdOrg,
+  teams: cmdTeams,
+  team: cmdTeam
 };
 
 /**
@@ -143,7 +147,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr', 'org', 'teams', 'team'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -251,12 +255,20 @@ function cmdHelp(terminal) {
    <span class="info">pr merge</span> &lt;number&gt;                   Merge PR (with confirmation)
    <span class="info">pr close</span> &lt;number&gt;                   Close PR (with confirmation)
 
-  <span class="info">Authentication</span>
-     <span class="info">login</span>             Connect to GitHub with OAuth
-     <span class="info">logout</span>            Disconnect from GitHub
-     <span class="info">status</span>            Show authentication status and rate limits
+   <span class="info">Authentication</span>
+      <span class="info">login</span>             Connect to GitHub with OAuth
+      <span class="info">logout</span>            Disconnect from GitHub
+      <span class="info">status</span>            Show authentication status and rate limits
 
- <span class="info">Other</span>
+   <span class="info">Organizations & Teams</span>
+      <span class="info">org</span>                     List your organizations
+      <span class="info">org</span> &lt;name&gt;              Navigate to organization repos
+      <span class="info">org</span> &lt;name&gt; --info       Show organization details
+      <span class="info">teams</span>                   List teams in current organization
+      <span class="info">team</span> &lt;name&gt;             List team repositories
+      <span class="info">team</span> &lt;name&gt; --members   List team members
+
+  <span class="info">Other</span>
   <span class="info">clear</span>             Clear terminal screen
   <span class="info">help</span>              Show this help message
   <span class="info">exit</span>              Exit terminal
@@ -2207,4 +2219,253 @@ function cmdTheme(terminal, githubUser, args) {
   terminal.print(`  <span class="info">theme</span>          Show current theme`);
   terminal.print(`  <span class="info">theme list</span>     List available themes`);
   terminal.print(`  <span class="info">theme set &lt;name&gt;</span> Set theme`);
+}
+
+async function cmdOrg(terminal, githubUser, args) {
+  if (args.length === 0) {
+    await listOrganizations(terminal);
+    return;
+  }
+  
+  const orgName = args[0];
+  
+  if (orgName === '--info' || args.includes('--info')) {
+    const actualOrg = orgName === '--info' ? terminal.getCurrentOrg?.() : orgName;
+    if (!actualOrg) {
+      terminal.print(`<span class="error">No organization specified. Usage: org &lt;name&gt; --info</span>`);
+      return;
+    }
+    await showOrgInfo(terminal, actualOrg);
+    return;
+  }
+  
+  await navigateToOrg(terminal, githubUser, orgName);
+}
+
+async function listOrganizations(terminal) {
+  terminal.showLoading('Fetching organizations...');
+  
+  try {
+    const orgs = await fetchUserOrgs();
+    terminal.hideLoading();
+    
+    if (orgs.length === 0) {
+      terminal.print(`<span class="info">No organizations found</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    terminal.print('<span class="success">Your Organizations:</span>\n');
+    
+    orgs.forEach(org => {
+      terminal.print(`  <span class="directory">@${org.login}</span>`);
+      if (org.description) {
+        terminal.print(`    <span class="info">${escapeHtml(org.description)}</span>`);
+      }
+    });
+    
+    terminal.print(`\n<span class="info">${orgs.length} organization(s)</span>`);
+    terminal.print(`<span class="info">Use 'org &lt;name&gt;' to explore an organization</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function navigateToOrg(terminal, githubUser, orgName) {
+  terminal.showLoading(`Loading @${orgName}...`);
+  
+  try {
+    const repos = await fetchOrgRepos(orgName);
+    terminal.hideLoading();
+    
+    if (terminal.setCurrentOrg) {
+      terminal.setCurrentOrg(orgName);
+    }
+    
+    terminal.print('');
+    terminal.print(`<span class="success">@${orgName}</span> repositories:\n`);
+    
+    repos.forEach(repo => {
+      const lock = repo.private ? '🔒 ' : '';
+      const lang = repo.language ? ` [<span class="info">${repo.language}</span>]` : '';
+      const stars = repo.stars > 0 ? ` <span class="success">★${repo.stars}</span>` : '';
+      terminal.print(`${lock}<span class="directory">${repo.name}/</span>${lang}${stars}`);
+      if (repo.description) {
+        terminal.print(`  <span class="info">${escapeHtml(repo.description)}</span>`);
+      }
+    });
+    
+    terminal.print(`\n<span class="info">${repos.length} repositories</span>`);
+    terminal.print(`<span class="info">Use 'teams' to list teams in this organization</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function showOrgInfo(terminal, orgName) {
+  terminal.showLoading(`Fetching @${orgName} info...`);
+  
+  try {
+    const info = await fetchOrgInfo(orgName);
+    terminal.hideLoading();
+    
+    terminal.print('');
+    terminal.print(`<span class="success">@${info.login}</span>`);
+    if (info.name !== info.login) {
+      terminal.print(`<span class="info">${escapeHtml(info.name)}</span>`);
+    }
+    terminal.print('');
+    
+    if (info.description) {
+      terminal.print(`<span class="info">${escapeHtml(info.description)}</span>`);
+      terminal.print('');
+    }
+    
+    terminal.print(`<span class="info">Public repos:</span>  ${info.public_repos}`);
+    terminal.print(`<span class="info">Followers:</span>     ${info.followers}`);
+    
+    if (info.location) {
+      terminal.print(`<span class="info">Location:</span>     ${escapeHtml(info.location)}`);
+    }
+    
+    if (info.blog) {
+      terminal.print(`<span class="info">Website:</span>      ${info.blog}`);
+    }
+    
+    if (info.email) {
+      terminal.print(`<span class="info">Email:</span>        ${info.email}`);
+    }
+    
+    terminal.print('');
+    terminal.print(`<a href="${info.html_url}" target="_blank" class="directory">${info.html_url}</a>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdTeams(terminal, githubUser, args) {
+  const currentOrg = terminal.getCurrentOrg?.();
+  
+  if (!currentOrg) {
+    terminal.print(`<span class="error">Not in an organization. Use 'org &lt;name&gt;' first.</span>`);
+    return;
+  }
+  
+  terminal.showLoading(`Fetching teams for @${currentOrg}...`);
+  
+  try {
+    const teams = await fetchOrgTeams(currentOrg);
+    terminal.hideLoading();
+    
+    if (teams.length === 0) {
+      terminal.print(`<span class="info">No teams found in this organization</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Teams in @${currentOrg}:</span>\n`);
+    
+    teams.forEach(team => {
+      terminal.print(`  <span class="directory">${team.slug}</span> <span class="info">(${team.members_count} members, ${team.repos_count} repos)</span>`);
+      if (team.description) {
+        terminal.print(`    <span class="info">${escapeHtml(team.description)}</span>`);
+      }
+    });
+    
+    terminal.print(`\n<span class="info">${teams.length} team(s)</span>`);
+    terminal.print(`<span class="info">Use 'team &lt;name&gt;' to list team repositories</span>`);
+    terminal.print(`<span class="info">Use 'team &lt;name&gt; --members' to list team members</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    if (error.message.includes('Access denied') || error.message.includes('403')) {
+      terminal.print(`<span class="error">Access denied. Re-login with 'read:org' scope to view teams.</span>`);
+    } else {
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  }
+}
+
+async function cmdTeam(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: team &lt;name&gt; [--members]</span>`);
+    return;
+  }
+  
+  const currentOrg = terminal.getCurrentOrg?.();
+  
+  if (!currentOrg) {
+    terminal.print(`<span class="error">Not in an organization. Use 'org &lt;name&gt;' first.</span>`);
+    return;
+  }
+  
+  const teamSlug = args[0];
+  const showMembers = args.includes('--members');
+  
+  if (showMembers) {
+    await listTeamMembers(terminal, currentOrg, teamSlug);
+  } else {
+    await listTeamRepos(terminal, currentOrg, teamSlug);
+  }
+}
+
+async function listTeamRepos(terminal, org, teamSlug) {
+  terminal.showLoading(`Fetching repos for team '${teamSlug}'...`);
+  
+  try {
+    const repos = await fetchTeamRepos(org, teamSlug);
+    terminal.hideLoading();
+    
+    if (repos.length === 0) {
+      terminal.print(`<span class="info">No repositories assigned to this team</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Team '${teamSlug}' repositories:</span>\n`);
+    
+    repos.forEach(repo => {
+      const perm = repo.permissions?.admin ? 'admin' : 
+                   repo.permissions?.push ? 'write' : 'read';
+      const lock = repo.private ? '🔒 ' : '';
+      const lang = repo.language ? ` [<span class="info">${repo.language}</span>]` : '';
+      terminal.print(`${lock}<span class="directory">${repo.name}/</span>${lang} <span class="info">(${perm})</span>`);
+      if (repo.description) {
+        terminal.print(`  <span class="info">${escapeHtml(repo.description)}</span>`);
+      }
+    });
+    
+    terminal.print(`\n<span class="info">${repos.length} repositories(s)</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function listTeamMembers(terminal, org, teamSlug) {
+  terminal.showLoading(`Fetching members for team '${teamSlug}'...`);
+  
+  try {
+    const members = await fetchTeamMembers(org, teamSlug);
+    terminal.hideLoading();
+    
+    if (members.length === 0) {
+      terminal.print(`<span class="info">No members in this team</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Team '${teamSlug}' members:</span>\n`);
+    
+    members.forEach(member => {
+      terminal.print(`  <span class="info">@${member.login}</span>`);
+    });
+    
+    terminal.print(`\n<span class="info">${members.length} member(s)</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
 }

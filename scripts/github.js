@@ -1402,4 +1402,245 @@ export async function addIssueComment(owner, repo, number, body) {
   }
 }
 
+export async function fetchUserOrgs() {
+  const cacheKey = 'orgs:user';
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/user/orgs?per_page=100`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      throw new Error('Failed to fetch organizations');
+    }
+    
+    const orgs = await response.json();
+    
+    const formattedOrgs = orgs.map(org => ({
+      login: org.login,
+      name: org.name || org.login,
+      description: org.description || '',
+      avatar_url: org.avatar_url,
+      html_url: org.html_url,
+      public_repos: org.public_repos
+    }));
+    
+    cache.set(cacheKey, formattedOrgs);
+    return formattedOrgs;
+  } catch (error) {
+    throw new Error(`Failed to fetch organizations: ${error.message}`);
+  }
+}
+
+export async function fetchOrgInfo(org) {
+  const cacheKey = `org:${org}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/orgs/${org}`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error(`Organization not found: ${org}`);
+      if (response.status === 403) throw new Error('Access denied. Re-login with read:org scope.');
+      throw new Error('Failed to fetch organization');
+    }
+    
+    const data = await response.json();
+    
+    const info = {
+      login: data.login,
+      name: data.name || data.login,
+      description: data.description || '',
+      location: data.location || '',
+      blog: data.blog || '',
+      email: data.email || '',
+      public_repos: data.public_repos,
+      followers: data.followers,
+      following: data.following,
+      created_at: data.created_at,
+      html_url: data.html_url,
+      avatar_url: data.avatar_url
+    };
+    
+    cache.set(cacheKey, info);
+    return info;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchOrgRepos(org) {
+  const cacheKey = `org:${org}:repos`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/orgs/${org}/repos?per_page=100&sort=updated`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error(`Organization not found: ${org}`);
+      if (response.status === 403) throw new Error('Access denied. Re-login with read:org scope.');
+      throw new Error('Failed to fetch organization repos');
+    }
+    
+    const repos = await response.json();
+    
+    const formattedRepos = repos.map(repo => ({
+      name: repo.name,
+      type: 'dir',
+      description: repo.description,
+      stars: repo.stargazers_count,
+      forks: repo.forks_count,
+      language: repo.language,
+      private: repo.private,
+      html_url: repo.html_url
+    }));
+    
+    cache.set(cacheKey, formattedRepos);
+    return formattedRepos;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchOrgTeams(org) {
+  const cacheKey = `org:${org}:teams`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/orgs/${org}/teams?per_page=100`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error(`Organization not found: ${org}`);
+      if (response.status === 403) throw new Error('Access denied. Re-login with read:org scope.');
+      throw new Error('Failed to fetch organization teams');
+    }
+    
+    const teams = await response.json();
+    
+    const formattedTeams = teams.map(team => ({
+      name: team.name,
+      slug: team.slug,
+      description: team.description || '',
+      members_count: team.members_count || 0,
+      repos_count: team.repos_count || 0,
+      privacy: team.privacy,
+      html_url: team.html_url
+    }));
+    
+    cache.set(cacheKey, formattedTeams);
+    return formattedTeams;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchTeamRepos(org, teamSlug) {
+  const cacheKey = `team:${org}:${teamSlug}:repos`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/orgs/${org}/teams/${teamSlug}/repos?per_page=100`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error(`Team not found: ${teamSlug}`);
+      if (response.status === 403) throw new Error('Access denied. Re-login with read:org scope.');
+      throw new Error('Failed to fetch team repos');
+    }
+    
+    const repos = await response.json();
+    
+    const formattedRepos = repos.map(repo => ({
+      name: repo.name,
+      type: 'dir',
+      description: repo.description,
+      language: repo.language,
+      private: repo.private,
+      permissions: repo.permissions,
+      html_url: repo.html_url
+    }));
+    
+    cache.set(cacheKey, formattedRepos);
+    return formattedRepos;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchTeamMembers(org, teamSlug) {
+  const cacheKey = `team:${org}:${teamSlug}:members`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/orgs/${org}/teams/${teamSlug}/members?per_page=100`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error(`Team not found: ${teamSlug}`);
+      if (response.status === 403) throw new Error('Access denied. Re-login with read:org scope.');
+      throw new Error('Failed to fetch team members');
+    }
+    
+    const members = await response.json();
+    
+    const formattedMembers = members.map(member => ({
+      login: member.login,
+      avatar_url: member.avatar_url,
+      html_url: member.html_url,
+      type: member.type
+    }));
+    
+    cache.set(cacheKey, formattedMembers);
+    return formattedMembers;
+  } catch (error) {
+    throw error;
+  }
+}
+
 export { getHeaders };
