@@ -1,159 +1,192 @@
 # GitHub OS
 
-A web-based terminal interface that mimics a VM file system, browsing GitHub repositories as directories and files.
+<div align="center">
+  
+  **Make GitHub feel like home.**
+  
+  [![Version](https://img.shields.io/badge/version-v2.4.2-blue.svg)](https://www.awesomejerry.space/github-os/)
+  [![Tests](https://img.shields.io/badge/tests-285%20passed-brightgreen.svg)](#)
+  [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+  [![Sponsor](https://img.shields.io/badge/💜-Sponsor-ff69b4.svg)](https://github.com/sponsors/awesomejerry)
+  
+  [Live Demo](https://www.awesomejerry.space/github-os/) • [Documentation](docs/USER_GUIDE.md) • [Commands](docs/COMMANDS.md)
+  
+  <img src="https://via.placeholder.com/800x400?text=GitHub+OS+Screenshot" alt="GitHub OS Screenshot" width="100%">
+  
+</div>
 
-![GitHub OS Demo](demo.gif)
+---
 
-## Features
+## What is GitHub OS?
 
-- 🖥️ Terminal-like interface with authentic SSH vibes
-- 🔐 **OAuth authentication** - Access private repos, 5000 req/hr
-- 📁 Browse GitHub repositories as directories
-- 📄 View file contents with syntax highlighting
-- 🌳 Tree view for directory structures
-- ⌨️ Command history (↑/↓ arrows)
-- 🚀 Fully client-side, no backend needed
-- 🎨 Dark theme with GitHub colors
-- 📱 Responsive design
+GitHub OS is a browser-based terminal interface that makes interacting with GitHub feel like using a native operating system. Navigate repos, edit files, manage issues and PRs - all through a familiar command-line interface.
 
-## Commands
+```bash
+awesomejerry@github-os:~/my-repo$ ls
+src/  tests/  README.md  package.json
 
-### Navigation
-| Command | Description |
-|---------|-------------|
-| `ls [path]` | List directory contents |
-| `cd <path>` | Change directory |
-| `pwd` | Print working directory |
-| `tree [path]` | Display directory tree |
-| `find <pattern>` | Find files by name pattern |
+awesomejerry@github-os:~/my-repo$ edit README.md
+# Opens built-in editor...
 
-### File Operations
-| Command | Description |
-|---------|-------------|
-| `cat <file>` | Display file contents |
-| `head <file> [n]` | Display first n lines |
-| `tail <file> [n]` | Display last n lines |
-| `grep <pattern> [file]` | Search for pattern |
-| `download <file>` | Download file |
-
-### Repository
-| Command | Description |
-|---------|-------------|
-| `info` | Show repository details |
-| `log [count]` | Show commit history |
-| `branch` | List all branches |
-| `issues [--closed\|--all]` | List issues |
-| `releases [count]` | List releases |
-| `contributors [count]` | List contributors |
-| `readme` | Display README.md |
-
-### Authentication (v2.0+)
-| Command | Description |
-|---------|-------------|
-| `login` | Connect to GitHub with OAuth |
-| `logout` | Disconnect from GitHub |
-| `status` | Show auth status and rate limits |
-| `whoami` | Show current GitHub user |
-| `connect <user>` | Switch to different GitHub user |
-
-### Other
-| Command | Description |
-|---------|-------------|
-| `clear` | Clear terminal screen |
-| `help` | Show available commands |
-| `exit` | Exit terminal |
-
-## Setup
-
-### Quick Start (Anonymous)
-
-1. Fork or clone this repository
-2. Open `index.html` in a browser
-3. Start browsing repos!
-
-### With OAuth (Recommended)
-
-To access private repos and get 5000 requests/hour:
-
-1. **Create a GitHub OAuth App:**
-   - Go to https://github.com/settings/developers
-   - Click "New OAuth App"
-   - Set:
-     - Application name: `GitHub OS`
-     - Homepage URL: `https://your-domain.com/github-os/`
-     - Callback URL: `https://your-domain.com/github-os/callback.html`
-   - Generate a Client Secret
-
-2. **Deploy Cloudflare Worker** (for token exchange):
-   ```bash
-   cd github-os-worker
-   npm install -g wrangler
-   wrangler login
-   wrangler secret put GITHUB_CLIENT_SECRET  # paste your secret
-   wrangler deploy
-   ```
-
-3. **Update Configuration:**
-   Edit `scripts/auth.js`:
-   ```javascript
-   const OAUTH_CONFIG = {
-     clientId: 'YOUR_CLIENT_ID',
-     redirectUri: 'https://your-domain.com/github-os/callback.html',
-     tokenProxyUrl: 'https://your-worker.workers.dev'
-   };
-   ```
-
-4. **Deploy and Login:**
-   - Push to GitHub Pages
-   - Run `login` command in the terminal
-
-### Local Development
-
-To change the default GitHub user, edit `scripts/config.js`:
-```javascript
-const DEFAULT_GITHUB_USER = 'your-username';
+awesomejerry@github-os:~/my-repo$ commit -m "Update README"
+✓ Committed 1 change
 ```
 
-### Deploy to GitHub Pages
+---
 
-1. Push this code to the `main` branch
-2. Go to Settings → Pages
-3. Select "Deploy from a branch" → `main` → `/ (root)`
-4. Your site will be live at `https://<username>.github.io/<repo-name>/`
+## ✨ Features
 
-## Technical Details
+### 🗺️ Navigation
+- `ls`, `cd`, `pwd`, `tree` - Navigate repositories like a filesystem
+- `cat`, `head`, `tail` - View file contents
+- `find`, `grep` - Search files and content
 
-- **Pure vanilla JavaScript** - No build step, no dependencies
-- **GitHub REST API** - With optional OAuth for higher rate limits
-- **PKCE OAuth Flow** - Secure authentication without Client Secret
-- **Syntax highlighting** - Powered by highlight.js
-- **Session management** - localStorage-based with multi-account support
-- **Responsive** - Works on desktop and mobile
+### ✏️ File Operations
+- `touch`, `mkdir`, `rm`, `mv`, `cp` - Create, delete, move files
+- `edit` - Built-in modal editor with syntax highlighting
+- **Staging workflow** - Stage changes before batch commit
 
-## Rate Limits
+### 🔀 Git Operations
+- `branch`, `checkout` - Manage branches
+- `commit` - Batch commit staged changes
+- `log` - View commit history
 
-| Mode | Rate Limit | Features |
-|------|------------|----------|
-| Anonymous | 60 requests/hour | Public repos only |
-| Authenticated | 5000 requests/hour | Public + private repos |
+### 🔀 Pull Requests
+- `pr` - List pull requests
+- `pr view` - View PR details
+- `pr create` - Create new PR
+- `pr merge` / `pr close` - Merge or close PRs
 
-## Limitations
+### 📋 Issues
+- `issues` - List and manage issues
+- `issues create` - Create issues
+- `issues close` - Close issues
+- `issues comment` - Add comments
 
-- Large files may not load (GitHub API limit is 1MB for file contents)
-- Binary files won't display properly
-- Code search requires authentication
+### 🎨 Themes
+- 6 built-in themes (dark, light, solarized, monokai, gruvbox)
+- `theme set <name>` - Switch themes instantly
 
-## Tips
+### 🔐 Authentication
+- GitHub OAuth with PKCE
+- Access private repositories
+- 5000 requests/hour (vs 60 unauthenticated)
 
-- Use `cd ..` to go up one directory
-- Use `cd /` to go back to root (repository list)
-- Press `↑` and `↓` to navigate command history
-- Use `tree` to get an overview of a repository structure
+---
 
-## License
+## 🚀 Quick Start
 
-MIT License - feel free to use and modify!
+1. **Open the app:** [awesomejerry.space/github-os](https://www.awesomejerry.space/github-os/)
 
-## Credits
+2. **Connect to a user:**
+   ```bash
+   connect awesomejerry
+   ```
 
-Created by [awesomejerry](https://github.com/awesomejerry)
+3. **Navigate to a repo:**
+   ```bash
+   cd github-os
+   ls
+   ```
+
+4. **Login to make changes:**
+   ```bash
+   login
+   ```
+
+5. **Start editing:**
+   ```bash
+   edit README.md
+   # Ctrl+S to save (stages changes)
+   commit -m "Update README"
+   ```
+
+---
+
+## 📚 Documentation
+
+- **[User Guide](docs/USER_GUIDE.md)** - Complete usage guide
+- **[Command Reference](docs/COMMANDS.md)** - All commands documented
+- **[API Reference](docs/API.md)** - GitHub API integration
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+L` | Clear screen |
+| `Ctrl+U` | Clear line |
+| `Ctrl+S` | Save (in editor) |
+| `Tab` | Auto-complete |
+| `↑/↓` | History |
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend:** Vanilla JavaScript (ES6+), CSS3
+- **Auth:** GitHub OAuth PKCE
+- **API:** GitHub REST API v3
+- **Backend:** Cloudflare Workers (token exchange)
+- **Testing:** Vitest (285 tests)
+
+---
+
+## 📊 Stats
+
+- **Version:** v2.4.2
+- **Commands:** 40+
+- **Tests:** 285 passing
+- **Themes:** 6
+- **Specs:** 24 (BDD format)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our contributing guidelines.
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `npm test`
+5. Submit a pull request
+
+---
+
+## 💜 Support This Project
+
+If GitHub OS helps you be more productive, consider supporting its development:
+
+**[🎁 Become a Sponsor](https://github.com/sponsors/awesomejerry)**
+
+Sponsors get:
+- 🌟 Recognition in README
+- 🚀 Early access to new features
+- 💬 Priority support
+- 🎨 Custom theme requests
+
+---
+
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- GitHub API team for the excellent API
+- Everyone who provided feedback and suggestions
+- Our sponsors for making development possible
+
+---
+
+<div align="center">
+  
+  Made with 💜 by [AwesomeJerry](https://github.com/awesomejerry)
+  
+  [⬆ Back to Top](#github-os)
+  
+</div>
