@@ -1402,4 +1402,343 @@ export async function addIssueComment(owner, repo, number, body) {
   }
 }
 
+export async function fetchNotifications(all = false) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  const cacheKey = `notifications:${all ? 'all' : 'recent'}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const params = new URLSearchParams({ per_page: '50' });
+    if (all) {
+      params.set('all', 'true');
+    }
+    
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/notifications?${params.toString()}`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      throw new Error('Failed to fetch notifications');
+    }
+    
+    const notifications = await response.json();
+    
+    const formattedNotifications = notifications.map(n => ({
+      id: n.id,
+      unread: n.unread,
+      reason: n.reason,
+      updated_at: n.updated_at,
+      repository: {
+        full_name: n.repository.full_name,
+        name: n.repository.name,
+        owner: n.repository.owner.login
+      },
+      subject: {
+        title: n.subject.title,
+        type: n.subject.type,
+        url: n.subject.url,
+        html_url: n.subject.html_url
+      }
+    }));
+    
+    cache.set(cacheKey, formattedNotifications);
+    return formattedNotifications;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function markNotificationsRead() {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/notifications`,
+      {
+        method: 'PUT',
+        headers: getHeaders()
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      throw new Error('Failed to mark notifications as read');
+    }
+    
+    cache.delete('notifications:all');
+    cache.delete('notifications:recent');
+    
+    return true;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchWorkflowRuns(owner, repo) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  const cacheKey = `workflow-runs:${owner}/${repo}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/actions/runs?per_page=30`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error('Repository not found');
+      throw new Error('Failed to fetch workflow runs');
+    }
+    
+    const data = await response.json();
+    
+    const formattedRuns = data.workflow_runs.map(run => ({
+      id: run.id,
+      name: run.name,
+      display_title: run.display_title,
+      status: run.status,
+      conclusion: run.conclusion,
+      branch: run.head_branch,
+      commit_sha: run.head_sha?.substring(0, 7),
+      event: run.event,
+      created_at: run.created_at,
+      updated_at: run.updated_at,
+      html_url: run.html_url,
+      workflow_id: run.workflow_id,
+      run_number: run.run_number,
+      actor: run.actor?.login
+    }));
+    
+    cache.set(cacheKey, formattedRuns);
+    return formattedRuns;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchWorkflowRun(owner, repo, runId) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  const cacheKey = `workflow-run:${owner}/${repo}:${runId}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/actions/runs/${runId}`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error('Run not found');
+      throw new Error('Failed to fetch workflow run');
+    }
+    
+    const run = await response.json();
+    
+    const formattedRun = {
+      id: run.id,
+      name: run.name,
+      display_title: run.display_title,
+      status: run.status,
+      conclusion: run.conclusion,
+      branch: run.head_branch,
+      commit_sha: run.head_sha?.substring(0, 7),
+      event: run.event,
+      created_at: run.created_at,
+      updated_at: run.updated_at,
+      html_url: run.html_url,
+      workflow_id: run.workflow_id,
+      run_number: run.run_number,
+      actor: run.actor?.login,
+      jobs_url: run.jobs_url
+    };
+    
+    cache.set(cacheKey, formattedRun);
+    return formattedRun;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchWorkflowJobs(owner, repo, runId) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  const cacheKey = `workflow-jobs:${owner}/${repo}:${runId}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/actions/runs/${runId}/jobs`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch workflow jobs');
+    }
+    
+    const data = await response.json();
+    
+    const formattedJobs = data.jobs.map(job => ({
+      id: job.id,
+      name: job.name,
+      status: job.status,
+      conclusion: job.conclusion,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      steps: job.steps?.map(step => ({
+        name: step.name,
+        status: step.status,
+        conclusion: step.conclusion,
+        number: step.number
+      })) || []
+    }));
+    
+    cache.set(cacheKey, formattedJobs);
+    return formattedJobs;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchWorkflowLogs(owner, repo, runId) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/actions/runs/${runId}/logs`,
+      { headers: getHeaders() }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error('Logs not available');
+      throw new Error('Failed to fetch workflow logs');
+    }
+    
+    const logText = await response.text();
+    return logText;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function rerunWorkflow(owner, repo, runId) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/actions/runs/${runId}/rerun`,
+      {
+        method: 'POST',
+        headers: getHeaders()
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error('Run not found');
+      if (response.status === 422) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Cannot rerun this workflow');
+      }
+      throw new Error('Failed to rerun workflow');
+    }
+    
+    cache.delete(`workflow-runs:${owner}/${repo}`);
+    
+    return true;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchWorkflows(owner, repo) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  const cacheKey = `workflows:${owner}/${repo}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/actions/workflows`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error('Repository not found');
+      throw new Error('Failed to fetch workflows');
+    }
+    
+    const data = await response.json();
+    
+    const formattedWorkflows = data.workflows.map(workflow => ({
+      id: workflow.id,
+      name: workflow.name,
+      path: workflow.path,
+      state: workflow.state,
+      created_at: workflow.created_at,
+      updated_at: workflow.updated_at,
+      html_url: workflow.html_url
+    }));
+    
+    cache.set(cacheKey, formattedWorkflows);
+    return formattedWorkflows;
+  } catch (error) {
+    throw error;
+  }
+}
+
 export { getHeaders };
