@@ -1230,4 +1230,180 @@ export async function fetchPR(owner, repo, number) {
   }
 }
 
+export async function fetchPRFiles(owner, repo, number) {
+  const cacheKey = `prfiles:${owner}/${repo}:${number}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls/${number}/files?per_page=100`,
+      { headers: getHeaders() }
+    );
+    
+    checkRateLimit(response);
+    
+    if (!response.ok) {
+      if (response.status === 404) throw new Error(`PR #${number} not found`);
+      throw new Error('Failed to fetch PR files');
+    }
+    
+    const files = await response.json();
+    
+    const formattedFiles = files.map(file => ({
+      filename: file.filename,
+      status: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+      changes: file.changes,
+      blob_url: file.blob_url
+    }));
+    
+    cache.set(cacheKey, formattedFiles);
+    return formattedFiles;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function createReview(owner, repo, number, event, body = '') {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const requestBody = { event };
+    if (body) {
+      requestBody.body = body;
+    }
+    
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls/${number}/reviews`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(requestBody)
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error(`PR #${number} not found`);
+      if (response.status === 422) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Validation failed');
+      }
+      throw new Error('Failed to create review');
+    }
+    
+    const review = await response.json();
+    
+    return {
+      id: review.id,
+      state: review.state,
+      body: review.body,
+      html_url: review.html_url
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function fetchPRComments(owner, repo, number) {
+  const cacheKey = `prcomments:${owner}/${repo}:${number}`;
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const [reviewComments, issueComments] = await Promise.all([
+      fetch(
+        `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/pulls/${number}/comments?per_page=100`,
+        { headers: getHeaders() }
+      ),
+      fetch(
+        `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues/${number}/comments?per_page=100`,
+        { headers: getHeaders() }
+      )
+    ]);
+    
+    checkRateLimit(reviewComments);
+    checkRateLimit(issueComments);
+    
+    if (!reviewComments.ok || !issueComments.ok) {
+      throw new Error('Failed to fetch PR comments');
+    }
+    
+    const reviewCommentsData = await reviewComments.json();
+    const issueCommentsData = await issueComments.json();
+    
+    const formattedReviewComments = reviewCommentsData.map(comment => ({
+      id: comment.id,
+      type: 'review',
+      user: comment.user.login,
+      body: comment.body,
+      path: comment.path,
+      created_at: comment.created_at,
+      html_url: comment.html_url
+    }));
+    
+    const formattedIssueComments = issueCommentsData.map(comment => ({
+      id: comment.id,
+      type: 'issue',
+      user: comment.user.login,
+      body: comment.body,
+      created_at: comment.created_at,
+      html_url: comment.html_url
+    }));
+    
+    const allComments = [...formattedReviewComments, ...formattedIssueComments]
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    
+    cache.set(cacheKey, allComments);
+    return allComments;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function addPRComment(owner, repo, number, body) {
+  if (!isAuthenticated()) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/issues/${number}/comments`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ body })
+      }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 404) throw new Error(`PR #${number} not found`);
+      throw new Error('Failed to add comment');
+    }
+    
+    const comment = await response.json();
+    
+    return {
+      id: comment.id,
+      body: comment.body,
+      user: comment.user.login,
+      created_at: comment.created_at,
+      html_url: comment.html_url
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
 export { getHeaders };

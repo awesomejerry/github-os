@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchPRFiles, createReview, fetchPRComments, addPRComment } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -241,10 +241,14 @@ function cmdHelp(terminal) {
      <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
      <span class="info">whoami</span>            Show current GitHub user
 
-  <span class="info">Pull Requests (requires login)</span>
-   <span class="info">pr create</span> [-t "title"] [-b "body"]   Create PR (interactive if no flags)
-   <span class="info">pr merge</span> &lt;number&gt;                   Merge PR (with confirmation)
-   <span class="info">pr close</span> &lt;number&gt;                   Close PR (with confirmation)
+   <span class="info">Pull Requests (requires login)</span>
+    <span class="info">pr create</span> [-t "title"] [-b "body"]   Create PR (interactive if no flags)
+    <span class="info">pr merge</span> &lt;number&gt;                   Merge PR (with confirmation)
+    <span class="info">pr close</span> &lt;number&gt;                   Close PR (with confirmation)
+    <span class="info">pr review</span> &lt;number&gt; [--approve|--request-changes|--comment "text"]
+                                       View or review a PR
+    <span class="info">pr comments</span> &lt;number&gt;                List PR comments
+    <span class="info">pr comment</span> &lt;number&gt; "text"          Add a comment to PR
 
   <span class="info">Authentication</span>
      <span class="info">login</span>             Connect to GitHub with OAuth
@@ -1679,6 +1683,10 @@ async function cmdPr(terminal, githubUser, args) {
     terminal.print(`  pr create [-t "title"] [-b "body"]  Create a PR`);
     terminal.print(`  pr merge &lt;number&gt;                  Merge a PR`);
     terminal.print(`  pr close &lt;number&gt;                  Close a PR`);
+    terminal.print(`  pr review &lt;number&gt; [--approve|--request-changes|--comment "text"]`);
+    terminal.print(`                                    View or review a PR`);
+    terminal.print(`  pr comments &lt;number&gt;               List PR comments`);
+    terminal.print(`  pr comment &lt;number&gt; "text"         Add a comment to PR`);
     return;
   }
 
@@ -1695,9 +1703,18 @@ async function cmdPr(terminal, githubUser, args) {
     case 'close':
       await cmdPrClose(terminal, githubUser, subArgs);
       break;
+    case 'review':
+      await cmdPrReview(terminal, githubUser, subArgs);
+      break;
+    case 'comments':
+      await cmdPrComments(terminal, githubUser, subArgs);
+      break;
+    case 'comment':
+      await cmdPrComment(terminal, githubUser, subArgs);
+      break;
     default:
       terminal.print(`<span class="error">Unknown pr command: ${subcommand}</span>`);
-      terminal.print(`<span class="info">Available: create, merge, close</span>`);
+      terminal.print(`<span class="info">Available: create, merge, close, review, comments, comment</span>`);
   }
 }
 
@@ -1892,6 +1909,215 @@ async function cmdPrClose(terminal, githubUser, args) {
       terminal.print(`<span class="error">Error: ${error.message}</span>`);
     }
   });
+}
+
+async function cmdPrReview(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: pr review &lt;number&gt; [--approve|--request-changes|--comment "text"]</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid PR number: ${args[0]}</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  const hasApprove = args.includes('--approve');
+  const hasRequestChanges = args.includes('--request-changes');
+  const commentIndex = args.indexOf('--comment');
+  const hasComment = commentIndex !== -1 && commentIndex + 1 < args.length;
+
+  if (hasApprove || hasRequestChanges) {
+    if (!session.isAuthenticated()) {
+      terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+      return;
+    }
+
+    const event = hasApprove ? 'APPROVE' : 'REQUEST_CHANGES';
+    const body = hasComment ? args.slice(commentIndex + 1).join(' ') : '';
+
+    terminal.showLoading(`Submitting review for PR #${number}...`);
+    
+    try {
+      const review = await createReview(parsed.owner, parsed.repo, number, event, body);
+      
+      terminal.hideLoading();
+      
+      terminal.print('');
+      terminal.print(`<span class="success">${hasApprove ? 'Approved' : 'Requested changes on'} PR #${number}</span>`);
+      if (review.html_url) {
+        terminal.print(`<a href="${review.html_url}" target="_blank" class="directory">${review.html_url}</a>`);
+      }
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  } else if (hasComment) {
+    if (!session.isAuthenticated()) {
+      terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+      return;
+    }
+
+    const body = args.slice(commentIndex + 1).join(' ');
+
+    terminal.showLoading(`Submitting review comment for PR #${number}...`);
+    
+    try {
+      const review = await createReview(parsed.owner, parsed.repo, number, 'COMMENT', body);
+      
+      terminal.hideLoading();
+      
+      terminal.print('');
+      terminal.print(`<span class="success">Added review comment to PR #${number}</span>`);
+      if (review.html_url) {
+        terminal.print(`<a href="${review.html_url}" target="_blank" class="directory">${review.html_url}</a>`);
+      }
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  } else {
+    terminal.showLoading(`Fetching PR #${number} files...`);
+    
+    try {
+      const files = await fetchPRFiles(parsed.owner, parsed.repo, number);
+      
+      terminal.hideLoading();
+      
+      if (files.length === 0) {
+        terminal.print(`<span class="info">No files changed in PR #${number}</span>`);
+        return;
+      }
+      
+      terminal.print('');
+      terminal.print(`<span class="success">PR #${number} - ${files.length} file(s) changed:</span>`);
+      terminal.print('');
+      
+      files.forEach(file => {
+        const statusIcon = file.status === 'added' ? '<span class="success">+</span>' :
+                          file.status === 'removed' ? '<span class="error">-</span>' :
+                          '<span class="warning">~</span>';
+        terminal.print(`${statusIcon} <span class="file">${file.filename}</span> <span class="info">(+${file.additions}/-${file.deletions})</span>`);
+      });
+      
+      terminal.print('');
+      terminal.print(`<span class="info">To review: pr review ${number} --approve|--request-changes|--comment "text"</span>`);
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  }
+}
+
+async function cmdPrComments(terminal, githubUser, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: pr comments &lt;number&gt;</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid PR number: ${args[0]}</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  terminal.showLoading(`Fetching comments for PR #${number}...`);
+  
+  try {
+    const comments = await fetchPRComments(parsed.owner, parsed.repo, number);
+    
+    terminal.hideLoading();
+    
+    if (comments.length === 0) {
+      terminal.print(`<span class="info">No comments found on PR #${number}</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    terminal.print(`<span class="success">PR #${number} - ${comments.length} comment(s):</span>`);
+    terminal.print('');
+    
+    comments.forEach(comment => {
+      const typeIcon = comment.type === 'review' ? '<span class="info">[review]</span>' : '<span class="success">[comment]</span>';
+      const relativeDate = formatRelativeDate(comment.created_at);
+      const pathInfo = comment.path ? ` <span class="file">${comment.path}</span>` : '';
+      
+      terminal.print(`${typeIcon} <span class="info">@${comment.user}</span>${pathInfo} <span class="info">(${relativeDate})</span>`);
+      
+      const lines = comment.body.split('\n');
+      const preview = lines.slice(0, 3).join('\n');
+      const truncated = lines.length > 3 ? '...' : '';
+      terminal.print(`  ${escapeHtml(preview)}${truncated}`);
+      terminal.print('');
+    });
+    
+    terminal.print(`<span class="info">Add comment: pr comment ${number} "your message"</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdPrComment(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.length < 2) {
+    terminal.print(`<span class="error">Usage: pr comment &lt;number&gt; "text"</span>`);
+    return;
+  }
+
+  const number = parseInt(args[0]);
+  if (isNaN(number) || number < 1) {
+    terminal.print(`<span class="error">Invalid PR number: ${args[0]}</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+  const body = args.slice(1).join(' ');
+
+  terminal.showLoading(`Adding comment to PR #${number}...`);
+  
+  try {
+    const comment = await addPRComment(parsed.owner, parsed.repo, number, body);
+    
+    terminal.hideLoading();
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Added comment to PR #${number}</span>`);
+    terminal.print(`<a href="${comment.html_url}" target="_blank" class="directory">${comment.html_url}</a>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
 }
 
 function cmdTheme(terminal, githubUser, args) {
