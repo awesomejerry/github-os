@@ -11,6 +11,8 @@ import { loadSavedTheme } from './themes.js';
 
 class GitHubOS {
   constructor() {
+    // Connected user (the user whose repos we're browsing)
+    this.connectedUser = null;
     this.terminal = new Terminal();
     this.githubUser = detectGitHubUser(DEFAULT_GITHUB_USER);
     
@@ -106,7 +108,7 @@ Type <span class="info">'login'</span> to authenticate with GitHub.
       const { clearCache } = await import('./github.js');
       clearCache();
       
-      const repos = await import('./github.js').then(m => m.fetchUserRepos(this.githubUser));
+      const repos = await import('./github.js').then(m => m.fetchUserRepos(this.getBrowsingUser()));
       
       // Count private repos if authenticated
       const { isAuthenticated } = await import('./session.js');
@@ -135,9 +137,9 @@ Type <span class="info">'login'</span> to authenticate with GitHub.
     // Print command with prompt
     this.terminal.printCommand(cmdLine);
 
-    // Execute command
+    // Execute command - pass the browsing user (connected user or default)
     if (commands[cmd]) {
-      await commands[cmd](this.terminal, this.githubUser, args, this);
+      await commands[cmd](this.terminal, this.getBrowsingUser(), args, this);
     } else {
       this.terminal.print(`<span class="error">Command not found: ${cmd}. Type 'help' for available commands.</span>`);
     }
@@ -211,6 +213,22 @@ Type <span class="info">'login'</span> to authenticate with GitHub.
   setGithubUser(username) {
     this.githubUser = username;
     clearUserCache(username);
+  }
+
+  /**
+   * Set browsing user (for connect command when logged in)
+   */
+  setBrowsingUser(username) {
+    this.connectedUser = username;
+    clearUserCache(username);
+  }
+
+  /**
+   * Get the user whose repos we're browsing
+   * Returns connectedUser if set, otherwise githubUser
+   */
+  getBrowsingUser() {
+    return this.connectedUser || this.githubUser;
   }
 }
 

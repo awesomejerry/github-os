@@ -78,7 +78,11 @@ function checkRateLimit(response) {
  * If authenticated, includes private repos
  */
 export async function fetchUserRepos(username) {
-  const cacheKey = `repos:${username}:${isAuthenticated() ? 'auth' : 'public'}`;
+  // Check if we're fetching the logged-in user's own repos
+  const session = await import('./session.js').then(m => m.loadSession());
+  const isOwnRepos = session?.username && session.username.toLowerCase() === username.toLowerCase();
+  
+  const cacheKey = `repos:${username}:${isAuthenticated() && isOwnRepos ? 'auth' : 'public'}`;
   
   if (cache.has(cacheKey)) {
     return cache.get(cacheKey);
@@ -88,15 +92,15 @@ export async function fetchUserRepos(username) {
     let url;
     let repos;
     
-    if (isAuthenticated()) {
-      // Use /user/repos to get all repos (including private)
+    if (isAuthenticated() && isOwnRepos) {
+      // Use /user/repos to get all repos including private for logged-in user's own repos
       url = `${GITHUB_API.BASE_URL}/user/repos?per_page=${GITHUB_API.REPOS_PER_PAGE}&sort=updated&affiliation=owner`;
       const response = await fetch(url, { headers: getHeaders() });
       checkRateLimit(response);
       if (!response.ok) throw new Error('Failed to fetch repositories');
       repos = await response.json();
     } else {
-      // Use /users/{username}/repos for public only
+      // Use /users/{username}/repos for public repos (or when viewing other users)
       url = `${GITHUB_API.BASE_URL}/users/${username}/repos?per_page=${GITHUB_API.REPOS_PER_PAGE}&sort=updated`;
       const response = await fetch(url, { headers: getHeaders() });
       checkRateLimit(response);

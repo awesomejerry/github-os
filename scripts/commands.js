@@ -599,9 +599,9 @@ async function cmdConnect(terminal, githubUser, args, app) {
     const repos = await fetchUserRepos(newUser);
     terminal.hideLoading();
     
-    // Update the app's github user
-    if (app && app.setGithubUser) {
-      app.setGithubUser(newUser);
+    // Update the browsing user (not githubUser - that's for auth context)
+    if (app && app.setBrowsingUser) {
+      app.setBrowsingUser(newUser);
     }
     
     // Reset to root
