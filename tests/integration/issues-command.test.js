@@ -73,7 +73,9 @@ describe('Issues Command', () => {
           user: { login: 'user1' },
           labels: [{ name: 'bug' }],
           created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-15T00:00:00Z',
           state: 'open',
+          comments: 5,
           html_url: 'https://github.com/owner/repo/issues/1'
         }
       ];
@@ -84,12 +86,51 @@ describe('Issues Command', () => {
         headers: { get: vi.fn(() => null) }
       });
 
-      const { commands } = await import('../../scripts/commands.js');
+      const { commands, clearCache } = await import('../../scripts/commands.js');
+      clearCache?.();
       await commands.issues(mockTerminal, 'testuser', []);
 
       expect(mockTerminal.showLoading).toHaveBeenCalled();
       expect(mockTerminal.hideLoading).toHaveBeenCalled();
       expect(mockTerminal.print).toHaveBeenCalled();
+    });
+
+    it('should show issues with new format including status line', async () => {
+      mockTerminal = createMockTerminal('/test-repo');
+      
+      const mockIssues = [
+        {
+          number: 42,
+          title: 'Bug in login',
+          user: { login: 'contributor' },
+          labels: [{ name: 'bug' }],
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-15T00:00:00Z',
+          state: 'open',
+          comments: 5,
+          html_url: 'https://github.com/owner/repo/issues/42'
+        }
+      ];
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockIssues,
+        headers: { get: vi.fn(() => null) }
+      });
+
+      const github = await import('../../scripts/github.js');
+      github.clearCache();
+      
+      const { commands } = await import('../../scripts/commands.js');
+      await commands.issues(mockTerminal, 'testuser', []);
+
+      const calls = mockTerminal.print.mock.calls;
+      const output = calls.map(c => c[0]).join('\n');
+      
+      expect(output).toContain('#42');
+      expect(output).toContain('Bug in login');
+      expect(output).toContain('Status:');
+      expect(output).toContain('5 comments');
     });
 
     it('should show error when not in a repository', async () => {

@@ -931,14 +931,20 @@ async function listIssues(terminal, parsed, args) {
     }
     
     terminal.print('');
+    terminal.print(`<span class="info">Issues for ${parsed.owner}/${parsed.repo}:</span>`);
+    terminal.print('');
     issues.forEach(issue => {
       const labels = issue.labels.length > 0 
         ? ` <span class="info">[${issue.labels.join(', ')}]</span>` 
         : '';
-      const relativeDate = formatRelativeDate(issue.created_at);
-      terminal.print(`<span class="success">#${issue.number}</span> ${escapeHtml(issue.title)} <span class="info">@${issue.author}</span>${labels} <span class="info">(${relativeDate})</span>`);
+      const relativeDate = formatRelativeDate(issue.updated_at);
+      const stateClass = issue.state === 'open' ? 'success' : 'warning';
+      const commentsText = issue.comments === 1 ? '1 comment' : `${issue.comments} comments`;
+      
+      terminal.print(`<span class="success">#${issue.number}</span> ${escapeHtml(issue.title)}${labels} by ${issue.author}`);
+      terminal.print(`   <span class="info">Status:</span> <span class="${stateClass}">${issue.state}</span> | ${commentsText} | Updated ${relativeDate}`);
     });
-    terminal.print(`\n<span class="info">${issues.length} issue(s)</span>`);
+    terminal.print(`\n<span class="info">${issues.length} ${state === 'all' ? '' : state} issue(s)</span>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);

@@ -15,7 +15,7 @@ vi.mock('../../scripts/session.js', () => ({
   getAccessToken: vi.fn(() => 'mock-token')
 }));
 
-const { fetchIssue, createIssue, updateIssue, addIssueComment, clearCache } = 
+const { fetchIssue, fetchRepoIssues, createIssue, updateIssue, addIssueComment, clearCache } = 
   await import('../../scripts/github.js');
 
 describe('Issue Operations', () => {
@@ -108,6 +108,88 @@ describe('Issue Operations', () => {
 
       const issue = await fetchIssue('owner', 'repo', 42);
       expect(issue.body).toBe('');
+    });
+  });
+
+  describe('fetchRepoIssues', () => {
+    it('should fetch issues list with comments and updated_at', async () => {
+      const mockIssues = [
+        {
+          number: 42,
+          title: 'Test Issue',
+          user: { login: 'author' },
+          labels: [{ name: 'bug' }],
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-15T00:00:00Z',
+          state: 'open',
+          comments: 5,
+          html_url: 'https://github.com/owner/repo/issues/42'
+        },
+        {
+          number: 41,
+          title: 'Another Issue',
+          user: { login: 'other' },
+          labels: [],
+          created_at: '2024-01-02T00:00:00Z',
+          updated_at: '2024-01-16T00:00:00Z',
+          state: 'closed',
+          comments: 2,
+          html_url: 'https://github.com/owner/repo/issues/41'
+        }
+      ];
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockIssues,
+        headers: { get: vi.fn(() => null) }
+      });
+
+      const issues = await fetchRepoIssues('owner', 'repo', 'all');
+      
+      expect(issues).toHaveLength(2);
+      expect(issues[0].number).toBe(42);
+      expect(issues[0].comments).toBe(5);
+      expect(issues[0].updated_at).toBe('2024-01-15T00:00:00Z');
+      expect(issues[1].comments).toBe(2);
+    });
+
+    it('should filter out pull requests from issues list', async () => {
+      const mockResponse = [
+        {
+          number: 42,
+          title: 'Test Issue',
+          user: { login: 'author' },
+          labels: [],
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+          state: 'open',
+          comments: 0,
+          html_url: 'https://github.com/owner/repo/issues/42'
+        },
+        {
+          number: 43,
+          title: 'Test PR',
+          user: { login: 'author' },
+          labels: [],
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+          state: 'open',
+          comments: 0,
+          html_url: 'https://github.com/owner/repo/pull/43',
+          pull_request: { url: 'https://api.github.com/repos/owner/repo/pulls/43' }
+        }
+      ];
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+        headers: { get: vi.fn(() => null) }
+      });
+
+      const issues = await fetchRepoIssues('owner', 'repo', 'open');
+      
+      expect(issues).toHaveLength(1);
+      expect(issues[0].number).toBe(42);
     });
   });
 

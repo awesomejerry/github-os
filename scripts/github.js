@@ -444,7 +444,9 @@ export async function fetchRepoIssues(owner, repo, state = 'open') {
         author: issue.user.login,
         labels: issue.labels.map(label => label.name),
         created_at: issue.created_at,
+        updated_at: issue.updated_at,
         state: issue.state,
+        comments: issue.comments,
         html_url: issue.html_url
       }));
     
