@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment, fetchUserOrgs, fetchOrgInfo, fetchOrgRepos, fetchOrgTeams, fetchTeamRepos, fetchTeamMembers } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment, fetchUserOrgs, fetchOrgInfo, fetchOrgRepos, fetchOrgTeams, fetchTeamRepos, fetchTeamMembers, fetchNotifications, markNotificationsRead, fetchWorkflowRuns, fetchWorkflowRun, fetchWorkflowJobs, fetchWorkflowLogs, rerunWorkflow, fetchWorkflows } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -83,7 +83,10 @@ export const commands = {
   // Organization & Teams commands (Phase 9)
   org: cmdOrg,
   teams: cmdTeams,
-  team: cmdTeam
+  team: cmdTeam,
+  // Notifications & Actions commands (Phase 10)
+  notifications: cmdNotifications,
+  actions: cmdActions
 };
 
 /**
@@ -147,7 +150,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr', 'org', 'teams', 'team'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr', 'org', 'teams', 'team', 'notifications', 'actions'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -2464,6 +2467,299 @@ async function listTeamMembers(terminal, org, teamSlug) {
     });
     
     terminal.print(`\n<span class="info">${members.length} member(s)</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+async function cmdNotifications(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  if (args.includes('--mark-read')) {
+    await markNotificationsReadHandler(terminal);
+    return;
+  }
+
+  const showAll = args.includes('--all');
+  await listNotifications(terminal, showAll);
+}
+
+async function listNotifications(terminal, showAll) {
+  terminal.showLoading();
+  
+  try {
+    const notifications = await fetchNotifications(showAll);
+    terminal.hideLoading();
+    
+    if (notifications.length === 0) {
+      terminal.print(`<span class="info">No notifications</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    terminal.print(`<span class="success">${showAll ? 'All' : 'Recent'} notifications:</span>`);
+    terminal.print('');
+    
+    notifications.forEach(n => {
+      const icon = getNotificationIcon(n.subject.type);
+      const repoName = n.repository.full_name;
+      const title = n.subject.title || 'Unknown';
+      const relativeDate = formatRelativeDate(n.updated_at);
+      
+      terminal.print(`${icon} <span class="info">${escapeHtml(title)}</span> (${repoName})`);
+      terminal.print(`   ${relativeDate}`);
+      terminal.print('');
+    });
+    
+    terminal.print(`<span class="info">${notifications.length} notification(s)</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+function getNotificationIcon(type) {
+  switch (type) {
+    case 'Issue': return '🔔';
+    case 'PullRequest': return '✅';
+    case 'Commit': return '📝';
+    case 'Release': return '🚀';
+    case 'Discussion': return '💬';
+    default: return '📌';
+  }
+}
+
+async function markNotificationsReadHandler(terminal) {
+  terminal.showLoading('Marking notifications as read...');
+  
+  try {
+    await markNotificationsRead();
+    terminal.hideLoading();
+    terminal.print(`<span class="success">All notifications marked as read</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdActions(terminal, githubUser, args) {
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  const currentPath = terminal.getPath();
+  
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  if (args.includes('--repo')) {
+    await listWorkflows(terminal, parsed);
+    return;
+  }
+
+  if (args.length === 0) {
+    await listWorkflowRuns(terminal, parsed);
+    return;
+  }
+
+  const subcommand = args[0].toLowerCase();
+  const subArgs = args.slice(1);
+
+  switch (subcommand) {
+    case 'view':
+      await cmdActionsView(terminal, parsed, subArgs);
+      break;
+    case 'rerun':
+      await cmdActionsRerun(terminal, parsed, subArgs);
+      break;
+    default:
+      terminal.print(`<span class="error">Unknown actions command: ${subcommand}</span>`);
+      terminal.print(`<span class="info">Available commands: view, rerun</span>`);
+      terminal.print(`<span class="info">Flags: --repo (list workflows)</span>`);
+  }
+}
+
+async function listWorkflowRuns(terminal, parsed) {
+  terminal.showLoading();
+  
+  try {
+    const runs = await fetchWorkflowRuns(parsed.owner, parsed.repo);
+    terminal.hideLoading();
+    
+    if (runs.length === 0) {
+      terminal.print(`<span class="info">No workflow runs found</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Workflow runs for ${parsed.owner}/${parsed.repo}:</span>`);
+    terminal.print('');
+    
+    runs.forEach(run => {
+      const icon = getStatusIcon(run.status, run.conclusion);
+      const statusText = run.conclusion || run.status;
+      const relativeDate = formatRelativeDate(run.updated_at || run.created_at);
+      
+      terminal.print(`${icon} ${escapeHtml(run.name || 'Workflow')} (#${run.run_number}) - <span class="info">${run.branch}</span>`);
+      terminal.print(`   Status: ${statusText} | ${relativeDate}`);
+    });
+    
+    terminal.print('');
+    terminal.print(`<span class="info">${runs.length} run(s) total</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+function getStatusIcon(status, conclusion) {
+  if (status === 'completed') {
+    switch (conclusion) {
+      case 'success': return '✅';
+      case 'failure': return '❌';
+      case 'cancelled': return '🚫';
+      case 'skipped': return '⏭️';
+      default: return '⚪';
+    }
+  }
+  switch (status) {
+    case 'in_progress': return '🔄';
+    case 'queued': return '⏸️';
+    case 'waiting': return '⏳';
+    default: return '⚪';
+  }
+}
+
+async function cmdActionsView(terminal, parsed, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: actions view &lt;run-id&gt;</span>`);
+    return;
+  }
+
+  const runId = args[0];
+  
+  terminal.showLoading();
+  
+  try {
+    const [run, jobs] = await Promise.all([
+      fetchWorkflowRun(parsed.owner, parsed.repo, runId),
+      fetchWorkflowJobs(parsed.owner, parsed.repo, runId)
+    ]);
+    
+    terminal.hideLoading();
+    
+    terminal.print('');
+    terminal.print(`<span class="success">${escapeHtml(run.name || 'Workflow')} #${run.run_number}</span>`);
+    terminal.print(`<span class="info">Status:</span> ${run.status} ${run.conclusion ? `(${run.conclusion})` : ''}`);
+    terminal.print(`<span class="info">Branch:</span> ${run.branch}`);
+    terminal.print(`<span class="info">Event:</span> ${run.event}`);
+    terminal.print(`<span class="info">Triggered by:</span> ${run.actor || 'unknown'}`);
+    terminal.print(`<span class="info">Created:</span> ${formatRelativeDate(run.created_at)}`);
+    terminal.print('');
+    
+    if (jobs.length > 0) {
+      terminal.print(`<span class="info">Jobs:</span>`);
+      jobs.forEach(job => {
+        const icon = getStatusIcon(job.status, job.conclusion);
+        terminal.print(`  ${icon} ${escapeHtml(job.name)} - ${job.status}${job.conclusion ? ` (${job.conclusion})` : ''}`);
+        
+        if (job.steps && job.steps.length > 0) {
+          job.steps.forEach(step => {
+            const stepIcon = getStepIcon(step.status, step.conclusion);
+            terminal.print(`      ${stepIcon} ${step.number}. ${escapeHtml(step.name)}`);
+          });
+        }
+      });
+    }
+    
+    terminal.print('');
+    terminal.print(`<a href="${run.html_url}" target="_blank" class="directory">${run.html_url}</a>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+function getStepIcon(status, conclusion) {
+  if (status === 'completed') {
+    switch (conclusion) {
+      case 'success': return '✓';
+      case 'failure': return '✗';
+      case 'skipped': return '○';
+      default: return '○';
+    }
+  }
+  if (status === 'in_progress') return '●';
+  return '○';
+}
+
+async function cmdActionsRerun(terminal, parsed, args) {
+  if (args.length === 0) {
+    terminal.print(`<span class="error">Usage: actions rerun &lt;run-id&gt;</span>`);
+    return;
+  }
+
+  const runId = args[0];
+  
+  terminal.print(`<span class="warning">This will rerun workflow ${runId}</span>`);
+  terminal.print(`<span class="info">Type 'yes' to confirm:</span>`);
+  
+  terminal.waitForInput(async (confirmation) => {
+    if (confirmation.toLowerCase() !== 'yes') {
+      terminal.print(`<span class="info">Rerun cancelled</span>`);
+      return;
+    }
+
+    terminal.showLoading(`Rerunning workflow ${runId}...`);
+    
+    try {
+      await rerunWorkflow(parsed.owner, parsed.repo, runId);
+      
+      terminal.hideLoading();
+      
+      terminal.print('');
+      terminal.print(`<span class="success">Workflow rerun initiated</span>`);
+      terminal.print(`<span class="info">Run 'actions' to see the new run</span>`);
+    } catch (error) {
+      terminal.hideLoading();
+      terminal.print(`<span class="error">Error: ${error.message}</span>`);
+    }
+  });
+}
+
+async function listWorkflows(terminal, parsed) {
+  terminal.showLoading();
+  
+  try {
+    const workflows = await fetchWorkflows(parsed.owner, parsed.repo);
+    terminal.hideLoading();
+    
+    if (workflows.length === 0) {
+      terminal.print(`<span class="info">No workflows found</span>`);
+      return;
+    }
+    
+    terminal.print('');
+    terminal.print(`<span class="success">Workflows in ${parsed.owner}/${parsed.repo}:</span>`);
+    terminal.print('');
+    
+    workflows.forEach(workflow => {
+      const stateIcon = workflow.state === 'active' ? '✅' : '⏸️';
+      const stateClass = workflow.state === 'active' ? 'success' : 'warning';
+      terminal.print(`${stateIcon} <span class="${stateClass}">${escapeHtml(workflow.name)}</span>`);
+      terminal.print(`   Path: ${workflow.path} | State: ${workflow.state}`);
+    });
+    
+    terminal.print('');
+    terminal.print(`<span class="info">${workflows.length} workflow(s)</span>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
