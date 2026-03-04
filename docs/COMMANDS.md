@@ -438,6 +438,9 @@ List contributors.
 ### `releases [count]`
 List releases.
 
+### `release [count]`
+Alias of `releases`.
+
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | count | number | No | 10 | Number of releases |

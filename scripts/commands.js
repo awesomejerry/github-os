@@ -59,6 +59,7 @@ export const commands = {
   issues: cmdIssues,
   contributors: cmdContributors,
   releases: cmdReleases,
+  release: cmdRelease,
   // Auth commands
   login: cmdLogin,
   logout: cmdLogout,
@@ -150,7 +151,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr', 'org', 'teams', 'team', 'notifications', 'actions'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'release', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr', 'org', 'teams', 'team', 'notifications', 'actions'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -249,6 +250,7 @@ function cmdHelp(terminal) {
      <span class="info">issues reopen</span> &lt;number&gt;      Reopen issue (with confirmation)
      <span class="info">issues comment</span> &lt;number&gt; "text"  Add comment to issue
      <span class="info">releases</span> [count]  List repository releases (default: 10)
+     <span class="info">release</span> [count]   Alias of <span class="info">releases</span>
      <span class="info">contributors</span> [count]     List repository contributors (default: 20)
      <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
      <span class="info">whoami</span>            Show current GitHub user
@@ -1227,6 +1229,11 @@ async function cmdContributors(terminal, githubUser, args) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
   }
+}
+
+async function cmdRelease(terminal, githubUser, args) {
+  // Phase 11 P0: singular command entrypoint for release listing
+  return cmdReleases(terminal, githubUser, args);
 }
 
 async function cmdReleases(terminal, githubUser, args) {

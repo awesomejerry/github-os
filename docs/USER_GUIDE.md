@@ -343,6 +343,7 @@ contributors 50      # Top 50
 
 ```bash
 releases             # List releases
+release              # Alias: list releases
 releases 20          # Last 20 releases
 ```
 

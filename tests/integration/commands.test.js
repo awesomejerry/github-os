@@ -21,7 +21,7 @@ describe('Commands', () => {
       const expectedCommands = [
         'help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit',
         'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download',
-        'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases'
+        'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'release'
       ];
       
       expectedCommands.forEach(cmd => {
@@ -164,6 +164,15 @@ describe('Commands', () => {
       
       const output = terminal.outputs.join('\n');
       expect(output).toContain('releases');
+    });
+  });
+
+  describe('Command Registry - release command', () => {
+    it('should have release command registered', async () => {
+      const { commands } = await import('../../scripts/commands.js');
+      
+      expect(commands).toHaveProperty('release');
+      expect(typeof commands.release).toBe('function');
     });
   });
 });
