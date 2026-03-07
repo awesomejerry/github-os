@@ -164,6 +164,7 @@ describe('Commands', () => {
       
       const output = terminal.outputs.join('\n');
       expect(output).toContain('releases');
+      expect(output).toContain('release view');
     });
   });
 

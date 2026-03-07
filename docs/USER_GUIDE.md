@@ -344,6 +344,7 @@ contributors 50      # Top 50
 ```bash
 releases             # List releases
 release              # Alias: list releases
+release view v2.5.1  # Show release details by tag
 releases 20          # Last 20 releases
 ```
 

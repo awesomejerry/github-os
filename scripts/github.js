@@ -547,6 +547,48 @@ export async function fetchRepoPR(owner, repo, number) {
   }
 }
 
+export async function fetchReleaseByTag(owner, repo, tag) {
+  const cacheKey = `release:${owner}/${repo}:${tag}`;
+
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/releases/tags/${encodeURIComponent(tag)}`,
+      { headers: getHeaders() }
+    );
+
+    checkRateLimit(response);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Release not found');
+      }
+      throw new Error('Failed to fetch release');
+    }
+
+    const release = await response.json();
+
+    const formattedRelease = {
+      tag_name: release.tag_name,
+      name: release.name || release.tag_name,
+      author: release.author?.login || 'unknown',
+      published_at: release.published_at,
+      prerelease: release.prerelease,
+      draft: release.draft,
+      html_url: release.html_url,
+      body: release.body || ''
+    };
+
+    cache.set(cacheKey, formattedRelease);
+    return formattedRelease;
+  } catch (error) {
+    throw new Error(`Failed to fetch release: ${error.message}`);
+  }
+}
+
 export async function fetchRepoReleases(owner, repo, count = 10) {
   const cacheKey = `releases:${owner}/${repo}:${count}`;
   

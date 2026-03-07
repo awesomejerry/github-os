@@ -441,6 +441,9 @@ List releases.
 ### `release [count]`
 Alias of `releases`.
 
+### `release view <tag>`
+View detailed information for a release by tag.
+
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | count | number | No | 10 | Number of releases |

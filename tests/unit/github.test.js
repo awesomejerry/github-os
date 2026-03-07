@@ -369,6 +369,40 @@ describe('GitHub API Functions', () => {
     });
   });
 
+  describe('fetchReleaseByTag', () => {
+    it('should fetch and format a release by tag', async () => {
+      const mockRelease = {
+        tag_name: 'v2.5.1',
+        name: 'Release 2.5.1',
+        author: { login: 'awesomejerry' },
+        published_at: '2026-03-04T14:00:00Z',
+        prerelease: false,
+        draft: false,
+        body: 'Release notes here',
+        html_url: 'https://github.com/user/repo/releases/tag/v2.5.1'
+      };
+      setMockResponse('/releases/tags/v2.5.1', mockRelease);
+
+      const { fetchReleaseByTag, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+
+      const release = await fetchReleaseByTag('user', 'repo', 'v2.5.1');
+      expect(release.tag_name).toBe('v2.5.1');
+      expect(release.name).toBe('Release 2.5.1');
+      expect(release.author).toBe('awesomejerry');
+      expect(release.body).toBe('Release notes here');
+    });
+
+    it('should return clear error when tag not found', async () => {
+      setMockResponse('/releases/tags/v9.9.9', new Error('not found'));
+
+      const { fetchReleaseByTag, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+
+      await expect(fetchReleaseByTag('user', 'repo', 'v9.9.9')).rejects.toThrow('Release not found');
+    });
+  });
+
   describe('fetchRepoReleases', () => {
     it('should fetch and format releases', async () => {
       const mockReleases = [
