@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Release Retrieval API
 The system SHALL retrieve a release by tag via GitHub API.
