@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, fetchReleaseByTag, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment, fetchUserOrgs, fetchOrgInfo, fetchOrgRepos, fetchOrgTeams, fetchTeamRepos, fetchTeamMembers, fetchNotifications, markNotificationsRead, fetchWorkflowRuns, fetchWorkflowRun, fetchWorkflowJobs, fetchWorkflowLogs, rerunWorkflow, fetchWorkflows } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, fetchReleaseByTag, createRelease, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment, fetchUserOrgs, fetchOrgInfo, fetchOrgRepos, fetchOrgTeams, fetchTeamRepos, fetchTeamMembers, fetchNotifications, markNotificationsRead, fetchWorkflowRuns, fetchWorkflowRun, fetchWorkflowJobs, fetchWorkflowLogs, rerunWorkflow, fetchWorkflows } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -252,6 +252,7 @@ function cmdHelp(terminal) {
      <span class="info">releases</span> [count]  List repository releases (default: 10)
      <span class="info">release</span> [count]   Alias of <span class="info">releases</span>
      <span class="info">release view</span> &lt;tag&gt;  View release details by tag
+     <span class="info">release create</span> &lt;tag&gt; [-t "title"] [-b "notes"] [--draft] [--prerelease]
      <span class="info">contributors</span> [count]     List repository contributors (default: 20)
      <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
      <span class="info">whoami</span>            Show current GitHub user
@@ -1234,8 +1235,14 @@ async function cmdContributors(terminal, githubUser, args) {
 
 async function cmdRelease(terminal, githubUser, args) {
   // Phase 11: singular command entrypoint with subcommands
-  if (args[0]?.toLowerCase() === 'view') {
+  const sub = args[0]?.toLowerCase();
+
+  if (sub === 'view') {
     return cmdReleaseView(terminal, githubUser, args.slice(1));
+  }
+
+  if (sub === 'create') {
+    return cmdReleaseCreate(terminal, githubUser, args.slice(1));
   }
 
   // default alias behavior: release [count]
@@ -1279,6 +1286,66 @@ async function cmdReleaseView(terminal, githubUser, args) {
       terminal.print(`<span class="info">No release notes</span>`);
     }
     terminal.print('');
+    terminal.print(`<a href="${release.html_url}" target="_blank" class="directory">${release.html_url}</a>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdReleaseCreate(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  const tag = args[0];
+  if (!tag) {
+    terminal.print(`<span class="error">Usage: release create &lt;tag&gt; [-t "title"] [-b "notes"] [--draft] [--prerelease]</span>`);
+    return;
+  }
+
+  let title = '';
+  let body = '';
+  let draft = false;
+  let prerelease = false;
+
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '-t' && i + 1 < args.length) {
+      title = args[i + 1];
+      i++;
+    } else if (args[i] === '-b' && i + 1 < args.length) {
+      body = args[i + 1];
+      i++;
+    } else if (args[i] === '--draft') {
+      draft = true;
+    } else if (args[i] === '--prerelease') {
+      prerelease = true;
+    }
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  terminal.showLoading('Creating release...');
+  try {
+    const release = await createRelease(parsed.owner, parsed.repo, {
+      tag_name: tag,
+      name: title || tag,
+      body,
+      draft,
+      prerelease
+    });
+
+    terminal.hideLoading();
+    terminal.print('');
+    terminal.print(`<span class="success">Created release ${release.tag_name}</span> ${escapeHtml(release.name)}`);
     terminal.print(`<a href="${release.html_url}" target="_blank" class="directory">${release.html_url}</a>`);
   } catch (error) {
     terminal.hideLoading();

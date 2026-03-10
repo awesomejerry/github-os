@@ -547,6 +547,48 @@ export async function fetchRepoPR(owner, repo, number) {
   }
 }
 
+export async function createRelease(owner, repo, payload) {
+  try {
+    const response = await fetch(
+      `${GITHUB_API.BASE_URL}/repos/${owner}/${repo}/releases`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
+      }
+    );
+
+    checkRateLimit(response);
+
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      if (response.status === 403) throw new Error('Permission denied');
+      if (response.status === 422) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Validation failed');
+      }
+      throw new Error('Failed to create release');
+    }
+
+    const release = await response.json();
+
+    clearCache();
+
+    return {
+      tag_name: release.tag_name,
+      name: release.name || release.tag_name,
+      author: release.author?.login || 'unknown',
+      published_at: release.published_at,
+      prerelease: release.prerelease,
+      draft: release.draft,
+      html_url: release.html_url,
+      body: release.body || ''
+    };
+  } catch (error) {
+    throw new Error(`Failed to create release: ${error.message}`);
+  }
+}
+
 export async function fetchReleaseByTag(owner, repo, tag) {
   const cacheKey = `release:${owner}/${repo}:${tag}`;
 

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('../../scripts/session.js', () => ({
+  loadSession: vi.fn(() => ({ username: 'awesomejerry', accessToken: 'mock-token' })),
+  isAuthenticated: vi.fn(() => true),
+  getAccessToken: vi.fn(() => 'mock-token')
+}));
+
 function createMockTerminal(path = '/github-os') {
   const outputs = [];
   return {
@@ -62,6 +68,23 @@ describe('release command feature coverage', () => {
         });
       }
 
+      if (url.includes('/releases') && !url.includes('/releases/tags/') && !url.includes('per_page=')) {
+        return Promise.resolve({
+          ok: true,
+          status: 201,
+          json: async () => ({
+            tag_name: 'v2.6.0',
+            name: 'v2.6.0',
+            author: { login: 'awesomejerry' },
+            published_at: '2026-03-08T00:00:00Z',
+            prerelease: false,
+            draft: false,
+            body: 'Release notes',
+            html_url: 'https://github.com/awesomejerry/github-os/releases/tag/v2.6.0'
+          })
+        });
+      }
+
       return Promise.resolve({ ok: false, status: 404 });
     });
   });
@@ -110,5 +133,24 @@ describe('release command feature coverage', () => {
     const output = terminal.outputs.join('\n');
     expect(output).toContain('v2.5.1');
     expect(output).toContain('Release 2.5.1');
+  });
+
+  it('supports release create <tag> and shows created release link', async () => {
+    const { commands } = await import('../../scripts/commands.js');
+
+    await commands.release(terminal, 'awesomejerry', ['create', 'v2.6.0', '-t', 'v2.6.0', '-b', 'Release notes']);
+
+    const output = terminal.outputs.join('\n');
+    expect(output).toContain('Created release v2.6.0');
+    expect(output).toContain('releases/tag/v2.6.0');
+  });
+
+  it('shows usage when tag is missing for release create', async () => {
+    const { commands } = await import('../../scripts/commands.js');
+
+    await commands.release(terminal, 'awesomejerry', ['create']);
+
+    const output = terminal.outputs.join('\n');
+    expect(output).toContain('Usage: release create');
   });
 });

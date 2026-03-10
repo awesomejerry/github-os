@@ -369,6 +369,36 @@ describe('GitHub API Functions', () => {
     });
   });
 
+  describe('createRelease', () => {
+    it('should create release and normalize response', async () => {
+      const mockRelease = {
+        tag_name: 'v2.6.0',
+        name: 'v2.6.0',
+        author: { login: 'awesomejerry' },
+        published_at: '2026-03-08T00:00:00Z',
+        prerelease: false,
+        draft: false,
+        body: 'Release notes',
+        html_url: 'https://github.com/user/repo/releases/tag/v2.6.0'
+      };
+      setMockResponse('/releases', mockRelease);
+
+      const { createRelease, clearCache } = await import('../../scripts/github.js');
+      clearCache();
+
+      const release = await createRelease('user', 'repo', {
+        tag_name: 'v2.6.0',
+        name: 'v2.6.0',
+        body: 'Release notes'
+      });
+
+      expect(release.tag_name).toBe('v2.6.0');
+      expect(release.name).toBe('v2.6.0');
+      expect(release.author).toBe('awesomejerry');
+      expect(release.body).toBe('Release notes');
+    });
+  });
+
   describe('fetchReleaseByTag', () => {
     it('should fetch and format a release by tag', async () => {
       const mockRelease = {
