@@ -343,6 +343,9 @@ contributors 50      # Top 50
 
 ```bash
 releases             # List releases
+release              # Alias: list releases
+release view v2.5.1  # Show release details by tag
+release create v2.6.0 -t "v2.6.0" -b "Release notes"
 releases 20          # Last 20 releases
 ```
 

@@ -4,8 +4,8 @@
   
   **Make GitHub feel like home.**
   
-  [![Version](https://img.shields.io/badge/version-v2.4.2-blue.svg)](https://www.awesomejerry.space/github-os/)
-  [![Tests](https://img.shields.io/badge/tests-285%20passed-brightgreen.svg)](#)
+  [![Version](https://img.shields.io/badge/version-v2.5.1-blue.svg)](https://www.awesomejerry.space/github-os/)
+  [![Tests](https://img.shields.io/badge/tests-319%20passed-brightgreen.svg)](#)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
   [![Sponsor](https://img.shields.io/badge/💜-Sponsor-ff69b4.svg)](https://github.com/sponsors/awesomejerry)
   
@@ -129,15 +129,15 @@ awesomejerry@github-os:~/my-repo$ commit -m "Update README"
 - **Auth:** GitHub OAuth PKCE
 - **API:** GitHub REST API v3
 - **Backend:** Cloudflare Workers (token exchange)
-- **Testing:** Vitest (285 tests)
+- **Testing:** Vitest (319 tests)
 
 ---
 
 ## 📊 Stats
 
-- **Version:** v2.4.2
+- **Version:** v2.5.1
 - **Commands:** 40+
-- **Tests:** 285 passing
+- **Tests:** 319 passing
 - **Themes:** 6
 - **Specs:** 24 (BDD format)
 

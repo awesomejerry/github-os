@@ -1,8 +1,5 @@
-# releases-command Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-releases-command. Update Purpose after archive.
-## Requirements
 ### Requirement: Releases Command
 The system SHALL support viewing detailed release information by tag.
 
@@ -20,4 +17,3 @@ The system SHALL support viewing detailed release information by tag.
 - **GIVEN** the user is in a repository directory
 - **WHEN** executing `release view <tag>` for a non-existent tag
 - **THEN** the system displays a clear not-found error
-

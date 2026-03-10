@@ -438,6 +438,15 @@ List contributors.
 ### `releases [count]`
 List releases.
 
+### `release [count]`
+Alias of `releases`.
+
+### `release view <tag>`
+View detailed information for a release by tag.
+
+### `release create <tag> [-t "title"] [-b "notes"] [--draft] [--prerelease]`
+Create a release for the given tag.
+
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | count | number | No | 10 | Number of releases |

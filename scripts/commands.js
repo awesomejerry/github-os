@@ -1,6 +1,6 @@
 // GitHub OS - Commands
 
-import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment, fetchUserOrgs, fetchOrgInfo, fetchOrgRepos, fetchOrgTeams, fetchTeamRepos, fetchTeamMembers, fetchNotifications, markNotificationsRead, fetchWorkflowRuns, fetchWorkflowRun, fetchWorkflowJobs, fetchWorkflowLogs, rerunWorkflow, fetchWorkflows } from './github.js';
+import { fetchUserRepos, fetchRepoContents, fetchFileContent, repoExists, getRepoInfo, getCache, searchCode, fetchRepoCommits, fetchRepoBranches, fetchRepoTree, fetchRepoIssues, fetchRepoContributors, fetchRepoReleases, fetchReleaseByTag, createRelease, getFile, createFile, deleteFile, checkFileExists, getDefaultBranchSHA, createBranch, deleteBranch, clearBranchCache, batchCommit, createPR, mergePR, closePR, fetchPR, fetchIssue, createIssue, updateIssue, addIssueComment, fetchUserOrgs, fetchOrgInfo, fetchOrgRepos, fetchOrgTeams, fetchTeamRepos, fetchTeamMembers, fetchNotifications, markNotificationsRead, fetchWorkflowRuns, fetchWorkflowRun, fetchWorkflowJobs, fetchWorkflowLogs, rerunWorkflow, fetchWorkflows } from './github.js';
 import { getLanguageForFile, formatBytes, escapeHtml, formatRelativeDate, validatePattern, isValidGitHubUrl } from './utils.js';
 import { LANGUAGE_MAP, DEFAULT_GITHUB_USER } from './config.js';
 import { openEditor } from './editor.js';
@@ -59,6 +59,7 @@ export const commands = {
   issues: cmdIssues,
   contributors: cmdContributors,
   releases: cmdReleases,
+  release: cmdRelease,
   // Auth commands
   login: cmdLogin,
   logout: cmdLogout,
@@ -150,7 +151,7 @@ export async function getCompletions(githubUser, currentPath, partial) {
   // If no space yet, we're completing a command
   if (parts.length === 1) {
     const commands = ['help', 'ls', 'cd', 'pwd', 'cat', 'tree', 'clear', 'exit', 
-                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr', 'org', 'teams', 'team', 'notifications', 'actions'];
+                      'whoami', 'connect', 'info', 'readme', 'head', 'tail', 'download', 'grep', 'log', 'branch', 'find', 'issues', 'contributors', 'releases', 'release', 'login', 'logout', 'status', 'touch', 'mkdir', 'rm', 'mv', 'cp', 'edit', 'add', 'diff', 'unstage', 'commit', 'theme', 'pr', 'org', 'teams', 'team', 'notifications', 'actions'];
     const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
     return { matches, isCommand: true };
   }
@@ -249,6 +250,9 @@ function cmdHelp(terminal) {
      <span class="info">issues reopen</span> &lt;number&gt;      Reopen issue (with confirmation)
      <span class="info">issues comment</span> &lt;number&gt; "text"  Add comment to issue
      <span class="info">releases</span> [count]  List repository releases (default: 10)
+     <span class="info">release</span> [count]   Alias of <span class="info">releases</span>
+     <span class="info">release view</span> &lt;tag&gt;  View release details by tag
+     <span class="info">release create</span> &lt;tag&gt; [-t "title"] [-b "notes"] [--draft] [--prerelease]
      <span class="info">contributors</span> [count]     List repository contributors (default: 20)
      <span class="info">connect</span> &lt;user&gt;   Switch to different GitHub user
      <span class="info">whoami</span>            Show current GitHub user
@@ -1223,6 +1227,126 @@ async function cmdContributors(terminal, githubUser, args) {
       terminal.print(`👤 <span class="info">@${contributor.login}</span>  <span class="success">${contributor.contributions}</span> contributions`);
     });
     terminal.print(`\n<span class="info">${contributors.length} contributor(s)</span>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdRelease(terminal, githubUser, args) {
+  // Phase 11: singular command entrypoint with subcommands
+  const sub = args[0]?.toLowerCase();
+
+  if (sub === 'view') {
+    return cmdReleaseView(terminal, githubUser, args.slice(1));
+  }
+
+  if (sub === 'create') {
+    return cmdReleaseCreate(terminal, githubUser, args.slice(1));
+  }
+
+  // default alias behavior: release [count]
+  return cmdReleases(terminal, githubUser, args);
+}
+
+async function cmdReleaseView(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  const tag = args[0];
+  if (!tag) {
+    terminal.print(`<span class="error">Usage: release view &lt;tag&gt;</span>`);
+    return;
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  terminal.showLoading();
+  try {
+    const release = await fetchReleaseByTag(parsed.owner, parsed.repo, tag);
+    terminal.hideLoading();
+
+    const relativeDate = release.published_at ? formatRelativeDate(release.published_at) : 'unpublished';
+    const prerelease = release.prerelease ? ` <span class="warning">[pre-release]</span>` : '';
+    const draft = release.draft ? ` <span class="warning">[draft]</span>` : '';
+
+    terminal.print('');
+    terminal.print(`<span class="success">${release.tag_name}</span> ${escapeHtml(release.name)}${prerelease}${draft}`);
+    terminal.print(`<span class="info">Author:</span> @${release.author}`);
+    terminal.print(`<span class="info">Published:</span> ${relativeDate}`);
+    terminal.print('');
+    if (release.body && release.body.trim()) {
+      terminal.print(`<span class="info">Release notes:</span>`);
+      terminal.print(escapeHtml(release.body));
+    } else {
+      terminal.print(`<span class="info">No release notes</span>`);
+    }
+    terminal.print('');
+    terminal.print(`<a href="${release.html_url}" target="_blank" class="directory">${release.html_url}</a>`);
+  } catch (error) {
+    terminal.hideLoading();
+    terminal.print(`<span class="error">Error: ${error.message}</span>`);
+  }
+}
+
+async function cmdReleaseCreate(terminal, githubUser, args) {
+  const currentPath = terminal.getPath();
+
+  if (currentPath === '/') {
+    terminal.print(`<span class="error">Not in a repository. Use 'cd' to enter a repo first.</span>`);
+    return;
+  }
+
+  if (!session.isAuthenticated()) {
+    terminal.print(`<span class="error">Authentication required. Use 'login' to connect.</span>`);
+    return;
+  }
+
+  const tag = args[0];
+  if (!tag) {
+    terminal.print(`<span class="error">Usage: release create &lt;tag&gt; [-t "title"] [-b "notes"] [--draft] [--prerelease]</span>`);
+    return;
+  }
+
+  let title = '';
+  let body = '';
+  let draft = false;
+  let prerelease = false;
+
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '-t' && i + 1 < args.length) {
+      title = args[i + 1];
+      i++;
+    } else if (args[i] === '-b' && i + 1 < args.length) {
+      body = args[i + 1];
+      i++;
+    } else if (args[i] === '--draft') {
+      draft = true;
+    } else if (args[i] === '--prerelease') {
+      prerelease = true;
+    }
+  }
+
+  const parsed = parsePath(githubUser, currentPath);
+
+  terminal.showLoading('Creating release...');
+  try {
+    const release = await createRelease(parsed.owner, parsed.repo, {
+      tag_name: tag,
+      name: title || tag,
+      body,
+      draft,
+      prerelease
+    });
+
+    terminal.hideLoading();
+    terminal.print('');
+    terminal.print(`<span class="success">Created release ${release.tag_name}</span> ${escapeHtml(release.name)}`);
+    terminal.print(`<a href="${release.html_url}" target="_blank" class="directory">${release.html_url}</a>`);
   } catch (error) {
     terminal.hideLoading();
     terminal.print(`<span class="error">Error: ${error.message}</span>`);
